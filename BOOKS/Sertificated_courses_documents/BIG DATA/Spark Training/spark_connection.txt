@@ -1,4 +1,0 @@
-export PATH="/var/lib/anaconda/bin:$PATH"
-export HADOOP_CONF_DIR="/etc/hadoop/conf"
-export PYSPARK_PYTON="/var/lib/anaconda/bin/python"
-IPYTHON_OPTS='notebook --port 8927' pyspark --master yarn-client --jars '/usr/hadoop/SparkTraining/commons-csv-1.2.jar,/usr/hadoop/SparkTraining/spark-csv_2.11-1.2.0.jar'
