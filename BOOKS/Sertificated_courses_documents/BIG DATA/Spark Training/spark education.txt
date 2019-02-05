@@ -1,0 +1,44 @@
+*** Anaconda is a python distribution that contains all the packages that we need. download it !!
+
+python language:
+
+
+if bI:
+	print "hey"
+else :
+	print "nop"
+
+# comment
+
+
+LOOP:
+
+for ... in .... :
+
+	print ........
+
+(you cannot modify .... in the loop
+
+for x in range(10) :
+	print x
+
+not very often but equivalent:
+
+x = 0
+
+while x< 10
+	print x
+	x += 1 (there is no ++ operator)
+
+
+IPYTHON_OPTS="notebook " pyspark --master local --jars "/usr/hadoop/SparkTraining/spark-csv_2.11-1.2.0.jar,/usr/hadoop/SparkTraining/commons-csv-1.2.jar"
+
+export PATH="/var/lib/anaconda/bin:$PATH"
+export HADOOP_CONF_DIR="/etc/hadoop/conf"
+export PYSPARK_PYTHON=/var/lib/anaconda/bin/python
+
+IPYTHON_OPTS="notebook" pyspark --master yarn- cluster--jars "/usr/hadoop/SparkTraining/spark-csv_2.11-1.2.0.jar,/usr/hadoop/SparkTraining/commons-csv-1.2.jar"
+
+export PATH="/var/lib/anaconda/bin:$PATH"
+export HADOOP_CONF_DIR="/etc/hadoop/conf"
+# export PYSPARK_PYTHON=/var/lib/anaconda/bin/python

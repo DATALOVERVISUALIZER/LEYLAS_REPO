@@ -1,0 +1,144 @@
+---
+---
+title: "RMarkdown-Homework-EGM (Pension Monitoring Center) Data Analysis-tidyverse,shiny"
+author: "Leyla Yigit"
+date: "31 Nov 2018"
+output: html_document
+---
+---
+
+```{r DOWNOAD RAW DATA}
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(dplyr )
+library(tidyverse )
+library(lubridate )
+#install.packages("tidyverse")
+#install.packages("lubridate")
+#install.packages("shiny")
+#Download Raw Data
+# Create a temporary file
+tmp<-tempfile(fileext=".xlsx")
+# Download file from repository to the temp file
+download.file("https://github.com/MEF-BDA503/pj18-Leyla.Yigit/blob/master/AssignmentWeek4/egm_example_data.xlsx?raw=true",mode="wb",destfile=tmp)
+# Read that excel file using readxl package's read_excel function. You might need to adjust the parameters (skip, col_names) according to your raw file's format.
+raw_data<-readxl::read_excel(tmp,skip=7,col_names=FALSE)
+# Remove the temp file
+file.remove(tmp)
+```
+
+```{r check egm}
+
+head(raw_data)
+colnames(raw_data) <- c("date","pension_fund_company","n_of_participants",  "fund_size_participants",   "gov_contribution", "contribution", "n_of_pensioners",  "n_of_ind_contracts",   "n_of_group_ind_contracts", "n_of_employer_group_certificates", "n_total","size_of_ind_contracts",  "size_of_group_ind_contracts",  "size_of_employer_group_certificates"   ,"size_total")
+head(raw_data)
+#replace nulls
+egm_data <- raw_data %>%mutate_if(is.numeric,funs(ifelse(is.na(.),0,.))) 
+print(egm_data,width=Inf)
+saveRDS(egm_data,file="egm_data.rds")
+egm_data %>% arrange(date) %>% head
+library(lubridate)
+#egm_data$Date <- month(date, label = FALSE, abbr = TRUE, locale = Sys.getlocale("LC_TIME"))
+#month(date)
+egm_data %>% arrange(date) %>% head
+#add a new column as total_contrübution
+egm_sum_participants<-egm_data %>% 
+    group_by(pension_fund_company) %>% summarise(sum_n_of_participants = sum(n_of_participants)) 
+    
+
+egm_sum_participants
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r check egm2}
+
+egm_sum_participants
+egm_sum_participants %>% 
+  ggplot(data = ., aes(x = sum_n_of_participants , y =pension_fund_company , color = sum_n_of_participants)) + 
+  labs(y = "company", x="sum of participants", fill="Brands") + 
+  geom_col(alpha = 0.3, color = "tomato")+
+    theme(plot.margin = margin(2,.8,2,.9, "cm"),
+        plot.background = element_rect(fill = "grey"))
+
+ggplot(data=egm_sum_participants ,aes(x =sum_n_of_participants  ,y =pension_fund_company, color = pension_fund_company)) +  geom_area()
+
+
+```
+```{r check egm bar chart}
+#daily total contrübution
+ #install.packages("ggplot2")
+
+date_sum <- egm_data %>% 
+  group_by(( date)) %>% 
+  mutate(sum_of = sum(n_of_participants))
+    
+date_sum    
+
+
+ggplot(data=egm_data, aes(x=pension_fund_company, y=fund_size_participants, fill=pension_fund_company)) +
+  geom_bar(stat="identity")+ 
+  theme_classic() + xlab("Firms") + 
+  theme(axis.text.x = element_text(angle = 90)) + ylab("Median Number of Participants")
+```
+
+
+```{r check scale_fill_gradient}
+egm_data
+# Example 1
+set.seed(1234)
+x <- rnorm(200)
+# Histogram
+hp<-qplot(x =x, fill=..count.., geom="histogram") 
+hp
+# Sequential color scheme
+hp+scale_fill_gradient(low="blue", high="red")
+```
+
+
+
+
+```{r  pie chart}
+egm_data
+
+egm_market_share<-egm_data %>% 
+    group_by(pension_fund_company) %>% summarise(market_share = sum(n_of_ind_contracts)) 
+
+egm_market_share
+    
+theme_set(theme_classic())
+
+# Source: Frequency table
+df <- as.data.frame(table(egm_market_share$pension_fund_company))
+colnames(df) <- c("class", "freq")
+pie <- ggplot(df, aes(x = "", y=freq, fill = factor(class))) + 
+  geom_bar(width = 1, stat = "identity") +
+  theme(axis.line = element_blank(), 
+        plot.title = element_text(hjust=0.5)) + 
+  labs(fill="class", 
+       x=NULL, 
+       y=NULL, 
+       title="Pie Chart of class", 
+       caption="egm")+
+   coord_polar(theta = "y")
+
+pie + coord_polar(theta = "y", start=0)
+
+# Source: Categorical variable.
+# mpg$class
+pie <- ggplot(mpg, aes(x = "", fill = factor(class))) + 
+  geom_bar(width = 1) +
+  theme(axis.line = element_blank(), 
+        plot.title = element_text(hjust=0.5)) + 
+  labs(fill="class", 
+       x=NULL, 
+       y=NULL, 
+       title="Pie Chart of class", 
+       caption="egm")
+  
+pie + coord_polar(theta = "y", start=0)
+```
