@@ -1,0 +1,183 @@
+<twds-spec>
+
+  <!-- Common Setup -->
+  <setup>
+    <required>
+    </required>
+
+    <collect>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>REDIRECT_URI</item>
+      <item>SCOPE</item>
+    </collect>
+
+    <step-definition-s>
+
+      <step-definition>
+        <id>hardwire_bq_client_id</id>
+        <step action="hardwire_context_kvp">
+          <key>CLIENTID</key>
+          <value>414627074249.apps.googleusercontent.com</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_bq_client_secret</id>
+        <step action="hardwire_context_kvp">
+          <key>CLIENTSECRET</key>
+          <value>NimqHnGJi3XvtM8XwWgTgoUr</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_bq_redirect_uri</id>
+        <step action="hardwire_context_kvp">
+          <key>REDIRECT_URI</key>
+          <value>urn:ietf:wg:oauth:2.0:oob</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_bq_scope</id>
+        <step action="hardwire_context_kvp">
+          <key>SCOPE</key>
+          <value>email profile https://www.googleapis.com/auth/bigquery https://www.googleapis.com/auth/cloudplatformprojects.readonly</value>
+        </step>
+      </step-definition>
+
+    </step-definition-s>
+
+
+    <flow>
+      <step id="hardwire_bq_client_id"></step>
+      <step id="hardwire_bq_client_secret"></step>
+      <step id="hardwire_bq_redirect_uri"></step>
+      <step id="hardwire_bq_scope"></step>
+    </flow>
+  </setup>
+
+
+  <!-- Server Setup -->
+  <setup-server>
+    <required>
+    </required>
+
+    <collect>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>REDIRECT_URI</item>
+      <item>SCOPE</item>
+    </collect>
+
+    <step-definition-s>
+
+      <step-definition>
+        <id>hardwire_bq_client_id_server</id>
+        <step action="hardwire_context_kvp">
+          <key>CLIENTID</key>
+          <value>399721357846.apps.googleusercontent.com</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_bq_client_secret_server</id>
+        <step action="hardwire_context_kvp">
+          <key>CLIENTSECRET</key>
+          <value>5IOc5Aed86KhY9LQsMfg8tBE</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_bq_redirect_uri_server</id>
+        <step action="hardwire_context_kvp">
+          <key>REDIRECT_URI</key>
+          <value>urn:ietf:wg:oauth:2.0:oob</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_bq_scope_server</id>
+        <step action="hardwire_context_kvp">
+          <key>SCOPE</key>
+          <value>email profile https://www.googleapis.com/auth/bigquery</value>
+        </step>
+      </step-definition>
+
+    </step-definition-s>
+
+
+    <flow>
+      <step id="hardwire_bq_client_id_server"></step>
+      <step id="hardwire_bq_client_secret_server"></step>
+      <step id="hardwire_bq_redirect_uri_server"></step>
+      <step id="hardwire_bq_scope_server"></step>
+    </flow>
+  </setup-server>
+
+  <!--  Enumerate Accounts -->
+  <projects>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+    </required>
+    <collect>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+    </collect>
+    <step-definition-s>
+      <!-- A single BQ login may be associated with multiple projects -->
+      <!--                                                            -->
+      <!--                                                            -->
+      <step-definition>
+        <id>request-projects</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/bigquery/v2/projects</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>bqProjectsJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-projects</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>bqProjectsJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+          </components>
+          <targets>
+            <pair>
+              <key>project-name-id</key>
+              <value>$.projects.friendlyName,id</value> <!-- UI -->
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+
+
+    </step-definition-s>
+
+    <flow>
+      <step id="request-projects"></step>
+      <step id="parse-projects"></step>
+    </flow>
+  </projects>
+
+</twds-spec>
