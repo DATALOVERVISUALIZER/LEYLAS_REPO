@@ -1,0 +1,1514 @@
+<twds-spec>
+
+  <!-- Common Setup -->
+  <setup>
+    <required>
+    </required>
+
+    <collect>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>REDIRECT_URI</item>
+      <item>SCOPE</item>
+    </collect>
+
+    <step-definition-s>
+
+      <step-definition>
+        <id>hardwire_ga_client_id</id>
+        <step action="hardwire_context_kvp">
+          <key>CLIENTID</key>
+          <value>766852939967-da6j3e8lqlev1rc2vak35igda1gcpci3.apps.googleusercontent.com</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_ga_client_secret</id>
+        <step action="hardwire_context_kvp">
+          <key>CLIENTSECRET</key>
+          <value>h6YIZrq8JZf4M8oampF869CC</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_ga_redirect_uri</id>
+        <step action="hardwire_context_kvp">
+          <key>REDIRECT_URI</key>
+          <value>urn:ietf:wg:oauth:2.0:oob</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_ga_scope</id>
+        <step action="hardwire_context_kvp">
+          <key>SCOPE</key>
+          <value>email profile https://www.googleapis.com/auth/analytics.readonly</value>
+        </step>
+      </step-definition>
+
+    </step-definition-s>
+
+
+    <flow>
+      <step id="hardwire_ga_client_id"></step>
+      <step id="hardwire_ga_client_secret"></step>
+      <step id="hardwire_ga_redirect_uri"></step>
+      <step id="hardwire_ga_scope"></step>
+    </flow>
+  </setup>
+
+
+  <!-- Server Setup -->
+  <setup-server>
+    <required>
+    </required>
+
+    <collect>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>REDIRECT_URI</item>
+      <item>SCOPE</item>
+    </collect>
+
+    <step-definition-s>
+
+      <step-definition>
+        <id>hardwire_ga_client_id_server</id>
+        <step action="hardwire_context_kvp">
+          <key>CLIENTID</key>
+          <value>969276621635.apps.googleusercontent.com</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_ga_client_secret_server</id>
+        <step action="hardwire_context_kvp">
+          <key>CLIENTSECRET</key>
+          <value>xEp8nGpm_0RWdlZ57Gx3p7La</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_ga_redirect_uri_server</id>
+        <step action="hardwire_context_kvp">
+          <key>REDIRECT_URI</key>
+          <value>urn:ietf:wg:oauth:2.0:oob</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_ga_scope_server</id>
+        <step action="hardwire_context_kvp">
+          <key>SCOPE</key>
+          <value>email profile https://www.googleapis.com/auth/analytics.readonly</value>
+        </step>
+      </step-definition>
+
+    </step-definition-s>
+
+
+    <flow>
+      <step id="hardwire_ga_client_id_server"></step>
+      <step id="hardwire_ga_client_secret_server"></step>
+      <step id="hardwire_ga_redirect_uri_server"></step>
+      <step id="hardwire_ga_scope_server"></step>
+    </flow>
+  </setup-server>
+
+  <!-- ### TABLE ENUM ### -->
+  <enum>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+    </required>
+    <collect>
+      <item>profile-id</item>
+      <item>account-id</item>
+      <item>property-id</item>
+    </collect>
+    <step-definition-s>
+      <!-- A single GA login may be associated with multiple accounts -->
+      <!--                                                            -->
+      <!-- We could segment profiles by account                       -->
+      <!--                                                            -->
+      <step-definition>
+        <id>request-accounts</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/management/accounts</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaAccountsJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-accounts</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaAccountsJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+          </components>
+          <targets>
+            <pair>
+              <key>account-name-id</key>
+              <value>$.items.name,id</value> <!-- UI -->
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+
+      <!-- A single GA login may be associated with multiple properties -->
+      <!--                                                              -->
+      <step-definition>
+        <id>request-properties</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/management/accounts/~all/webproperties</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaPropertiesJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-properties</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaPropertiesJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+          </components>
+          <targets>
+            <pair>
+              <key>property-name-id</key>
+              <value>$.items.name,id</value> <!-- UI -->
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+
+      <!-- A single GA account may be associated with multiple profiles -->
+      <!-- We need the profile-id to query for data                     -->
+      <!-- Query as listed here is for ~all, but could limit to account -->
+      <!--                                                              -->
+      <step-definition>
+        <id>request-profiles</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/management/accounts/~all/webproperties/~all/profiles</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaProfilesJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-profiles</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaProfilesJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+            <component>accountId</component>
+            <component>timezone</component>
+            <component>currency</component>
+          </components>
+          <targets>
+            <pair>
+              <key>profile-name-id-accountID-timezone-currency</key>
+              <value>$.items.name,id,accountId,timezone,currency</value> <!-- UI -->
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_account_id</id>
+        <step action="hardwire_context_kvp">
+          <key>account-id</key>
+          <value>625217</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_property_id</id>
+        <step action="hardwire_context_kvp">
+          <key>property-id</key>
+          <value>UA-625217-1</value>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>hardwire_profile_id</id>
+        <step action="hardwire_context_kvp">
+          <key>profile-id</key>
+          <value>5643971</value>
+        </step>
+      </step-definition>
+
+
+    </step-definition-s>
+
+    <flow>
+      <step id="request-accounts"></step>
+      <step id="parse-accounts"></step>
+      <step id="request-properties"></step>
+      <step id="parse-properties"></step>
+      <step id="request-profiles"></step>
+      <step id="parse-profiles"></step>
+      <step id="hardwire_account_id"></step>
+      <step id="hardwire_property_id"></step>
+      <step id="hardwire_profile_id"></step>
+    </flow>
+  </enum>
+
+  <!--  Enumerate Accounts -->
+  <accounts>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+    </required>
+    <collect>
+    </collect>
+    <step-definition-s>
+      <!-- A single GA login may be associated with multiple accounts -->
+      <!--                                                            -->
+      <!-- We could segment profiles by account                       -->
+      <!--                                                            -->
+      <step-definition>
+        <id>request-accounts</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/management/accounts</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaAccountsJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-accounts</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaAccountsJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+          </components>
+          <targets>
+            <pair>
+              <key>account-name-id</key>
+              <value>$.items.name,id</value> <!-- UI -->
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+
+
+    </step-definition-s>
+
+    <flow>
+      <step id="request-accounts"></step>
+      <step id="parse-accounts"></step>
+    </flow>
+  </accounts>
+
+  <!--  Enumerate Metadata from the GA API -->
+  <metadata-api>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+    </required>
+
+    <collect>
+    </collect>
+
+    <step-definition-s>
+
+      <!--
+      Note that for the Metadata, we retrieve the IDs and the attributes separately.
+      We certainly need to parse them separately, due to limitations in the JSON parser.
+      We could retrieve the entire JSON once, but we get at least a 35% performance
+      improvement by retrieving the IDs and attributes separately.  This reduces the
+      volume of JSON that we need to parse for the IDs.  That's likely why the performance
+      boost is so high.
+      -->
+      <step-definition>
+        <id>ga-column-retrieve-ids</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/metadata/ga/columns?fields=items/id</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaColumnsJSONIds</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>ga-column-retrieve-attribs</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/metadata/ga/columns?fields=items/attributes</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaColumnsJSONAttribs</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>ga-column-parse-ids</id>
+        <step action="list_values_from_jsonpath">
+          <payloadkey>gaColumnsJSONIds</payloadkey>
+          <component>id</component>
+          <targets>
+            <pair>
+              <key>metadata-id</key>
+              <value>$.items.id</value>
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>ga-column-parse-attribs</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaColumnsJSONAttribs</payloadkey>
+          <components>
+            <component>type</component>
+            <component>dataType</component>
+            <component>group</component>
+            <component>status</component>
+            <component>uiName</component>
+            <component>description</component>
+          </components>
+          <targets>
+            <pair>
+              <key>metadata-columntype-datatype-group-status-name-description</key>
+              <value>$.items.attributes.type,dataType,group,status,uiName,description</value>
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>ga-column-parse-attribs-templates</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaColumnsJSONAttribs</payloadkey>
+          <components>
+            <component>type</component>
+            <component>dataType</component>
+            <component>group</component>
+            <component>status</component>
+            <component>uiName</component>
+            <component>description</component>
+            <component>minTemplateIndex</component>
+            <component>maxTemplateIndex</component>
+          </components>
+          <targets>
+            <pair>
+              <key>metadata-columntype-datatype-group-status-name-description-minTemplate-maxTemplate</key>
+              <value>$.items.attributes.type,dataType,group,status,uiName,description,minTemplateIndex,maxTemplateIndex</value>
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+
+    </step-definition-s>
+
+    <flow>
+      <step id="ga-column-retrieve-ids"></step>
+      <step id="ga-column-retrieve-attribs"></step>
+      <step id="ga-column-parse-ids"></step>
+      <step id="ga-column-parse-attribs"></step>
+      <step id="ga-column-parse-attribs-templates"></step>
+    </flow>
+  </metadata-api>
+
+
+    <!--  Enumerate Properties -->
+  <properties>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+      <item>account-id</item>
+    </required>
+    <collect>
+      <item>property-name-id</item>
+    </collect>
+    <step-definition-s>
+
+
+      <!-- A single GA login may be associated with multiple properties -->
+      <!--                                                              -->
+      <step-definition>
+        <id>request-properties</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/management/accounts/$account-id$/webproperties</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <substitutions>
+            <pair>
+              <key>$account-id$</key>
+              <value type="ref">account-id</value>
+            </pair>
+          </substitutions>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaPropertiesJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-properties</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaPropertiesJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+            <component>websiteUrl</component>
+          </components>
+          <targets>
+            <pair>
+              <!-- B109106 - Mark websiteUrl as optional by surrounding with "%%" -->
+              <key>property-name-id</key>
+              <value>$.items.name,id,%%websiteUrl%%</value> <!-- UI -->
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+    </step-definition-s>
+
+    <flow>
+      <step id="request-properties"></step>
+      <step id="parse-properties"></step>
+    </flow>
+  </properties>
+
+
+  <!--  Enumerate Profiles scoped to a Project-->
+  <project_profiles>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+      <item>account-id</item>
+      <item>property-id</item>
+    </required>
+    <collect>
+      <item>profile-ids</item>
+    </collect>
+    <step-definition-s>
+
+      <!-- A single GA account may be associated with multiple profiles -->
+      <!-- We need the profile-id to query for data                     -->
+      <!--                                                              -->
+      <step-definition>
+        <id>request-profiles</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/management/accounts/$account-id$/webproperties/$property-id$/profiles</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <substitutions>
+            <pair>
+              <key>$account-id$</key>
+              <value type="ref">account-id</value>
+            </pair>
+            <pair>
+              <key>$property-id$</key>
+              <value type="ref">property-id</value>
+            </pair>
+          </substitutions>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaProfilesJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-profiles</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaProfilesJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+            <component>accountId</component>
+            <component>timezone</component>
+            <component>currency</component>
+          </components>
+          <targets>
+            <pair>
+              <key>profile-name-id-accountID-timezone-currency</key>
+              <value>$.items.name,id,accountId,timezone,currency</value> <!-- UI -->
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+    </step-definition-s>
+
+
+    <flow>
+      <step id="request-profiles"></step>
+      <step id="parse-profiles"></step>
+    </flow>
+  </project_profiles>
+
+
+  <!--  Enumerate All Profiles in an Account-->
+  <!--  Capturing their WebPropertyID's -->
+  <!--  to eliminate phantom properties -->
+
+  <properties_for_account_profiles>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+      <item>account-id</item>
+    </required>
+    <collect>
+      <item>profile-ids</item>
+    </collect>
+    <step-definition-s>
+
+      <!-- A single GA account may be associated with multiple profiles -->
+      <!-- We need the profile-id to query for data                     -->
+      <!--                                                              -->
+      <step-definition>
+        <id>request-profiles</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/management/accounts/$account-id$/webproperties/~all/profiles</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <substitutions>
+            <pair>
+              <key>$account-id$</key>
+              <value type="ref">account-id</value>
+            </pair>
+          </substitutions>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaProfilesJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-profiles</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaProfilesJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+            <component>accountId</component>
+            <component>timezone</component>
+            <component>currency</component>
+          </components>
+          <targets>
+            <pair>
+              <key>profile-name-id-accountID-timezone-currency</key>
+              <value>$.items.name,webPropertyId,accountId,timezone,currency</value> <!-- UI -->
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+    </step-definition-s>
+
+
+    <flow>
+      <step id="request-profiles"></step>
+      <step id="parse-profiles"></step>
+    </flow>
+  </properties_for_account_profiles>
+
+  <!--  Enumerate Goals -->
+  <goals>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+      <item>account-id</item>
+      <item>property-id</item>
+      <item>profile-id</item>
+    </required>
+    <collect>
+      <item>goal-ids</item>
+    </collect>
+    <step-definition-s>
+
+      <step-definition>
+        <id>request-goals</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">analytics/v3/management/accounts/$account-id$/webproperties/$property-id$/profiles/$profile-id$/goals</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <substitutions>
+            <pair>
+              <key>$account-id$</key>
+              <value type="ref">account-id</value>
+            </pair>
+            <pair>
+              <key>$profile-id$</key>
+              <value type="ref">profile-id</value>
+            </pair>
+            <pair>
+              <key>$property-id$</key>
+              <value type="ref">property-id</value>
+            </pair>
+          </substitutions>
+          <resultkey>gaGoalsJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-goals</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaGoalsJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+            <component>value</component>
+          </components>
+          <targets>
+            <pair>
+              <key>goal-name-id-value</key>
+              <value>$.items.name,id,value</value>
+            </pair>
+          </targets>
+          <options>
+            <pair>
+              <key>optional</key>
+              <value>true</value>
+            </pair>
+          </options>
+        </step>
+      </step-definition>
+
+    </step-definition-s>
+
+
+    <flow>
+      <step id="request-goals"></step>
+      <step id="parse-goals"></step>
+    </flow>
+  </goals>
+
+  <!--  Enumerate Segments -->
+  <segments>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+    </required>
+    <collect>
+    </collect>
+    <step-definition-s>
+      <!-- A single GA login may be associated with multiple accounts -->
+      <!--                                                            -->
+      <!-- We could segment profiles by account                       -->
+      <!--                                                            -->
+      <step-definition>
+        <id>request-segments</id>
+        <step action="http_request">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/management/segments</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>gaSegmentsJSON</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>parse-segments</id>
+        <step action="nested_values_from_jsonpath">
+          <payloadkey>gaSegmentsJSON</payloadkey>
+          <components>
+            <component>name</component>
+            <component>id</component>
+          </components>
+          <targets>
+            <pair>
+              <key>segment-name-id</key>
+              <value>$.items.name,id</value>
+              <!-- UI -->
+            </pair>
+          </targets>
+        </step>
+      </step-definition>
+    </step-definition-s>
+
+    <flow>
+      <step id="request-segments"></step>
+      <step id="parse-segments"></step>
+    </flow>
+  </segments>
+  
+  <!-- ### METADATA ### -->
+  <metadata>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+      <item>username</item>
+      <item>profile-id</item>
+      <item>goal-name-ids</item>
+      <item>start-date</item>
+      <item>end-date</item>
+      <item>metrics</item>
+      <item>dimensions</item>
+      <item>segment-id</item>
+      <item>currency</item>
+    </required>
+    <collect>
+      <item>response-sampled</item>
+      <item>sample-size</item>
+      <item>sample-space</item>
+      <item>total-results</item>
+    </collect>
+    <step-definition-s>
+
+
+      <step-definition>
+        <id>request-data</id>
+        <step action="http_request_page">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/data/ga</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+            <pair>
+              <key>start-index</key>
+              <value type="ref" default="1">start-index</value>
+            </pair>
+            <pair>
+              <key>max-results</key>
+              <value type="ref">max-results</value>
+            </pair>
+            <pair>
+              <key>ids</key>
+              <value type="combined">
+                <value type="simple">ga:</value>
+                <value type="ref">profile-id</value>
+              </value>
+            </pair>
+            <pair>
+              <key>start-date</key>
+              <value type="ref">start-date</value>
+            </pair>
+            <pair>
+              <key>end-date</key>
+              <value type="ref">end-date</value>
+            </pair>
+            <pair>
+              <key>metrics</key>
+              <value type="ref">metrics</value>
+            </pair>
+            <pair>
+              <key>dimensions</key>
+              <value type="ref">dimensions</value>
+            </pair>
+            <pair>
+              <key>segment</key>
+              <value type="combined">
+                <value type="simple">gaid::</value>
+                <!-- BUGZID 92346: Google Analytics Connector - Importing Advertising Metrics is not working
+                don't accept an empty string, or a "-1", or just whitespace -->
+                <value type="ref" validate="^(?!^\s*(-1)?\s*$)">segment-id</value>
+              </value>
+            </pair>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>finalPayload</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>get-metadata</id>
+        <step action="generic-json-metadata-handling">
+          <payloadkey>finalPayload</payloadkey>
+
+          <!-- Extact single-valued params from the metadata in the response -->
+          <extract-params>
+            <pair>
+              <key>$.query.start-index</key>
+              <value>start-index</value>
+            </pair>
+            <pair>
+              <key>$.containsSampledData</key>
+              <value>response-sampled</value>
+            </pair>
+            <pair>
+              <key>$.sampleSize</key>
+              <value>sample-size</value>
+            </pair>
+            <pair>
+              <key>$.sampleSpace</key>
+              <value>sample-space</value>
+            </pair>
+            <pair>
+              <key>$.totalResults</key>
+              <value>total-results</value>
+            </pair>
+          </extract-params>
+
+          <!-- The data will have to be transformed -->
+          <mappings>
+            <!-- Map from GA typenames to Tableau typenames -->
+            <datatype-mapping>
+              <pair>
+                <key>STRING</key>
+                <value>string</value>
+              </pair>
+              <pair>
+                <key>INTEGER</key>
+                <value>integer</value>
+              </pair>
+              <pair>
+                <key>TIME</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>DATETIME</key>
+                <value>datetime</value>
+              </pair>
+              <pair>
+                <key>CURRENCY</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>PERCENT</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>FLOAT</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>U.S. CURRENCY</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>US CURRENCY</key>
+                <value>real</value>
+              </pair>
+            </datatype-mapping>
+
+            <format-hints>
+              <pair>
+                <key>DATETIME</key>
+                <value>YYYYMMDD</value>
+              </pair>
+            </format-hints>
+
+            <null-mapping>
+              <pair>
+                <key>STRING</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>INTEGER</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>TIME</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>DATETIME</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>DATE</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>CURRENCY</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>PERCENT</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>REAL</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>FLOAT</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>U.S. CURRENCY</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>US CURRENCY</key>
+                <value>(not set)</value>
+              </pair>
+            </null-mapping>
+
+          </mappings>
+
+          <!-- Extract multi-rowed params from the metadata in the response -->
+          <cols>$.columnHeaders</cols>
+          <colName>$.name</colName>
+          <colType>$.dataType</colType>
+          <colRole>$.columnType</colRole>
+
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>setup-pagination</id>
+        <step action="setup-pagination">
+          <params>
+            <pair>
+              <key>start-index</key>
+              <value type="simple">1</value>
+            </pair>
+            <pair>
+              <key>max-results</key>
+              <value type="simple">1</value>
+            </pair>
+            <pair>
+              <key>total-results</key>
+              <value type="simple">totalResults</value>
+            </pair>
+          </params>
+        </step>
+      </step-definition>
+
+      <!-- the fast version used in production -->
+      <step-definition>
+        <id>get-data</id>
+
+
+        <step action="row-col-json-handling">
+          <payloadkey>finalPayload</payloadkey>
+
+          <!-- Extact single-valued params from the metadata in the response -->
+          <extract-params>
+            <pair>
+              <key>$.query.start-index</key>
+              <value>start-index</value>
+            </pair>
+            <pair>
+              <key>$.containsSampledData</key>
+              <value>response-sampled</value>
+            </pair>
+            <pair>
+              <key>$.sampleSize</key>
+              <value>sample-size</value>
+            </pair>
+            <pair>
+              <key>$.sampleSpace</key>
+              <value>sample-space</value>
+            </pair>
+            <pair>
+              <key>$.totalResults</key>
+              <value>total-results</value>
+            </pair>
+          </extract-params>
+
+          <rows>rows</rows>
+
+          <!-- $.rows[0][0] -->
+          <cell>$[#rowIndexIt][#colIndexIt]</cell>
+          <cell-row-token>#rowIndexIt</cell-row-token>
+          <cell-col-token>#colIndexIt</cell-col-token>
+
+        </step>
+      </step-definition>
+
+      <!-- the slow version used in development -->
+      <step-definition>
+        <id>get-data-row-col</id>
+
+
+        <step action="generic-json-handling">
+          <payloadkey>finalPayload</payloadkey>
+
+          <rows>$.rows</rows>
+
+          <cell>$[#rowIndexIt][#colIndexIt]</cell>
+          <cell-row-token>#rowIndexIt</cell-row-token>
+          <cell-col-token>#colIndexIt</cell-col-token>
+        </step>
+
+
+      </step-definition>
+
+    </step-definition-s>
+
+    <flow>
+      <step id="setup-pagination"></step>
+      <step id="request-data"></step>
+      <step id="get-metadata"></step>
+    </flow>
+  </metadata>
+
+  <!-- ### DATA ### -->
+  <data>
+    <required>
+      <item>CLIENTID</item>
+      <item>CLIENTSECRET</item>
+      <item>ACCESSTOKEN</item>
+      <item>username</item>
+      <item>profile-id</item>
+      <item>start-date</item>
+      <item>end-date</item>
+      <item>metrics</item>
+      <item>dimensions</item>
+      <item>segment-id</item>
+      <item>currency</item>
+    </required>
+    <collect>
+      <item>response-sampled</item>
+      <item>sample-size</item>
+      <item>sample-space</item>
+      <item>total-results</item>
+    </collect>
+    <step-definition-s>
+
+
+      <step-definition>
+        <id>request-data</id>
+        <step action="http_request_page">
+          <urlserver>https://www.googleapis.com</urlserver>
+          <urlpath>
+            <value type="simple">/analytics/v3/data/ga</value>
+          </urlpath>
+          <port>443</port>
+          <method>GET</method>
+          <params>
+            <pair>
+              <key>start-index</key>
+              <value type="ref" default="1">start-index</value>
+            </pair>
+            <pair>
+              <key>max-results</key>
+              <value type="ref">max-results</value>
+            </pair>
+            <pair>
+              <key>ids</key>
+              <value type="combined">
+                <value type="simple">ga:</value>
+                <value type="ref">profile-id</value>
+              </value>
+            </pair>
+            <pair>
+              <key>start-date</key>
+              <value type="ref">start-date</value>
+            </pair>
+            <pair>
+              <key>end-date</key>
+              <value type="ref">end-date</value>
+            </pair>
+            <pair>
+              <key>metrics</key>
+              <value type="ref">metrics</value>
+            </pair>
+            <pair>
+              <key>dimensions</key>
+              <value type="ref">dimensions</value>
+            </pair>
+            <pair>
+              <key>segment</key>
+              <value type="combined">
+                <value type="simple">gaid::</value>
+                <!-- BUGZID 92346: Google Analytics Connector - Importing Advertising Metrics is not working
+                don't accept an empty string, or a "-1", or just whitespace -->
+                <value type="ref" validate="^(?!^\s*(-1)?\s*$)">segment-id</value>
+              </value>
+            </pair>
+            <pair>
+              <key>include-empty-rows</key>
+                <value type="simple">true</value>
+            </pair>
+          </params>
+          <headers>
+            <pair>
+              <key>Authorization</key>
+              <value type="combined">
+                <value type="simple">OAuth </value>
+                <value type="ref">ACCESSTOKEN</value>
+              </value>
+            </pair>
+          </headers>
+          <resultkey>finalPayload</resultkey>
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>get-metadata</id>
+        <step action="generic-json-metadata-handling">
+          <payloadkey>finalPayload</payloadkey>
+
+          <!-- Extract single-valued params from the metadata in the response -->
+          <extract-params>
+            <pair>
+              <key>$.query.start-index</key>
+              <value>start-index</value>
+            </pair>
+            <pair>
+              <key>$.containsSampledData</key>
+              <value>response-sampled</value>
+            </pair>
+            <pair>
+              <key>$.sampleSize</key>
+              <value>sample-size</value>
+            </pair>
+            <pair>
+              <key>$.sampleSpace</key>
+              <value>sample-space</value>
+            </pair>
+            <pair>
+              <key>$.totalResults</key>
+              <value>total-results</value>
+            </pair>
+          </extract-params>
+
+          <!-- The data will have to be transformed -->
+          <mappings>
+            <!-- Map from GA typenames to Tableau typenames -->
+            <datatype-mapping>
+              <pair>
+                <key>STRING</key>
+                <value>string</value>
+              </pair>
+              <pair>
+                <key>INTEGER</key>
+                <value>integer</value>
+              </pair>
+              <pair>
+                <key>TIME</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>DATETIME</key>
+                <value>datetime</value>
+              </pair>
+              <pair>
+                <key>CURRENCY</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>PERCENT</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>FLOAT</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>U.S. CURRENCY</key>
+                <value>real</value>
+              </pair>
+              <pair>
+                <key>US CURRENCY</key>
+                <value>real</value>
+              </pair>
+            </datatype-mapping>
+
+            <format-hints>
+              <pair>
+                <key>PERCENT</key>
+                <value>divide_by_100</value>
+              </pair>
+              <pair>
+                <key>DATE</key>
+                <value>YYYYMMDD</value>
+              </pair>
+            </format-hints>
+
+            <null-mapping>
+              <pair>
+                <key>STRING</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>INTEGER</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>TIME</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>DATETIME</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>DATE</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>CURRENCY</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>PERCENT</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>REAL</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>FLOAT</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>U.S. CURRENCY</key>
+                <value>(not set)</value>
+              </pair>
+              <pair>
+                <key>US CURRENCY</key>
+                <value>(not set)</value>
+              </pair>
+            </null-mapping>
+
+          </mappings>
+
+          <!-- Extract multi-rowed params from the metadata in the response -->
+          <cols>$.columnHeaders</cols>
+          <colName>$.name</colName>
+          <colType>$.dataType</colType>
+          <colRole>$.columnType</colRole>
+
+        </step>
+      </step-definition>
+
+      <step-definition>
+        <id>setup-pagination</id>
+        <step action="setup-pagination">
+          <params>
+            <pair>
+              <key>start-index</key>
+              <value type="simple">1</value>
+            </pair>
+            <pair>
+              <key>max-results</key>
+              <value type="simple">10000</value>
+            </pair>
+            <pair>
+              <key>total-results</key>
+              <value type="simple">totalResults</value>
+            </pair>
+          </params>
+        </step>
+      </step-definition>
+
+      <!-- the fast version used in production -->
+      <step-definition>
+        <id>get-data</id>
+        <step action="row-col-json-handling">
+          <payloadkey>finalPayload</payloadkey>
+
+          <rows>rows</rows>
+
+          <!-- $.rows[0][0] -->
+          <cell>$[#rowIndexIt][#colIndexIt]</cell>
+          <cell-row-token>#rowIndexIt</cell-row-token>
+          <cell-col-token>#colIndexIt</cell-col-token>
+
+          <!-- Extract single-valued params from the data in the response -->
+          <extra-params>
+            <pair>
+              <key>$.containsSampledData</key>
+              <value>response-sampled</value>
+            </pair>
+            <pair>
+              <key>$.totalResults</key>
+              <value>total-results</value>
+            </pair>
+            <pair>
+              <key>$.nextLink</key>
+              <value>next-link</value>
+            </pair>
+          </extra-params>
+        </step>
+      </step-definition>
+
+      <!-- the slow version used in development -->
+      <step-definition>
+        <id>get-data-row-col</id>
+
+
+        <step action="generic-json-handling">
+          <payloadkey>finalPayload</payloadkey>
+
+          <rows>$.rows</rows>
+
+          <cell>$[#rowIndexIt][#colIndexIt]</cell>
+          <cell-row-token>#rowIndexIt</cell-row-token>
+          <cell-col-token>#colIndexIt</cell-col-token>
+        </step>
+
+
+      </step-definition>
+
+    </step-definition-s>
+
+    <flow>
+      <step id="setup-pagination"></step>
+      <step id="request-data"></step>
+      <step id="get-metadata"></step>
+      <step id="get-data"></step>
+    </flow>
+  </data>
+
+</twds-spec>

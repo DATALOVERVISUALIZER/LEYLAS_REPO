@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1524088642907.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3383177278",
+    "id" : "462D76FC",
+    "lastKnownWriteTime" : 1525467766,
+    "last_content_update" : 1525467766465,
+    "path" : "~/tutorials/Downloads/shiny_nba/server.R",
+    "project_path" : "server.R",
+    "properties" : {
+        "cursorPosition" : "41,0",
+        "scrollLine" : "35"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

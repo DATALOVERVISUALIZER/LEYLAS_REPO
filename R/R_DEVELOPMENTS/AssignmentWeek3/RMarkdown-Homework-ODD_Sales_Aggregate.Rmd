@@ -1,0 +1,192 @@
+---
+title: "RMarkdown-Homework-ODD_Sales_Aggregated"
+author: "Leyla Yigit"
+date: "24 Nov 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#get libraries
+library(readr)
+library(tidyverse)
+library(scales)
+library(stringr)
+library(zoo)
+library(dplyr)
+```
+
+## R Markdown
+
+```{r cars}
+#get data, filter data and str_replace for ASTON MARTÄ°N"
+car_agg <- readRDS("C:\\Users\\Kafein\\Documents\\github2\\pj18-Leyla.Yigit\\AssignmentWeek3\\car_data_aggregate.rds")
+car_agg <- car_agg %>% filter(brand_name !="TOPLAM:" & !str_detect(brand_name,"ODD"))
+car_agg$brand_name <- str_replace(car_agg$brand_name,"ASTON MARTÄ°N","ASTON MARTIN")
+tbl_df(car_agg)
+#glimpse(car_agg) # gives structure of data
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+#arrange date
+car_agg$Date <- as.Date(as.yearmon(paste(car_agg$year, car_agg$month), "%Y %m"), frac = 1)
+car_agg <- car_agg %>% 
+              arrange(Date)
+#check dates
+tbl_df
+(car_agg %>% 
+  select( Date) %>% distinct%>% 
+  arrange(desc(Date)))
+
+```
+
+#Calculate the mean of sales numbers 
+```{r car_agg}
+#Total car sales per year and month .
+yearly_sales <- car_agg %>% group_by(year) %>% summarise(total_auto=sum(auto_total))%>% arrange(year)%>%slice(1:12)
+yearly_sales
+monthly_sales <- car_agg %>% group_by(Date) %>% summarise(total_auto=sum(auto_total))%>% arrange(Date)%>%slice(1:12)
+monthly_sales
+
+```
+
+
+
+
+
+
+
+
+```{r monthly_sales}
+#Total car sales per year and month  graph
+ggplot(monthly_sales) + geom_point(aes(x=Date, y=total_auto, color="steelblue")) + geom_smooth(aes(x=Date, y=total_auto, color="steelblue")) # Same as above but specifying the aesthetics inside the geoms.
+```
+
+```{r Scatterplot}
+#Scatterplot
+#ou might want to add the plot’s main title and perhaps change the X and Y axis titles. This can be accomplished using the labs layer, meant for specifying the labels. However, manipulating the size, color of the labels is the job of the ‘Theme’.
+library(ggplot2)
+gg <- ggplot(monthly_sales, aes(x=Date, y=total_auto, color="cut")) + geom_point() + labs(title="Scatterplot", x="Date", y="amount")  # add axis lables and plot title.
+print(gg)
+#adjusting theme
+gg1 <- gg + theme(plot.title=element_text(size=30, face="bold"), 
+                  axis.text.x=element_text(size=15), 
+                  axis.text.y=element_text(size=15),
+                  axis.title.x=element_text(size=25),
+                  axis.title.y=element_text(size=25)) + 
+  scale_color_discrete(name="Cut of diamonds")  # add title and axis text, change legend title.
+print(gg1)  # print the plot
+```
+
+
+
+
+
+```{r ggplot2}
+library(ggplot2)
+#make clorfull 
+#adjusting theme
+ggplot(data = car_agg, aes(x = Date, y = total_total),size=100,height=10,width=20) +
+    geom_point(alpha = 0.3, aes(color = brand_name))
+#gg1 + facet_wrap( ~ brand_name, ncol=3)  # columns defined by 'cut'
+
+```
+
+```{r Boxplot}
+#Boxplot
+
+ggplot(data = car_agg, aes(x = brand_name, y = total_imp)) +
+    geom_boxplot()
+
+#By adding points to boxplot, we can have a better idea of the number of measurements and of their distribution:
+
+ggplot(data = car_agg, aes(x = brand_name, y = total_imp)) +
+    geom_boxplot(alpha = 0) +
+    geom_jitter(alpha = 0.3, color = "tomato")+
+theme(axis.text.x = element_text(angle = 90)) + ylab("Total Cars İmported")
+
+```
+
+
+```{r plotting time series data}
+#Let’s calculate number of counts per year for each species. First we need to group the data and count records within each group:
+
+count_by_month <- car_agg %>%
+    group_by(Date) %>%
+    tally
+
+count_by_month
+
+p <- ggplot(count_by_month, aes(x=Date, y=n),color=Date)
+p + geom_col()+
+  geom_bar(stat="identity", position=position_dodge())+
+   geom_text(aes(label=n), vjust=1.6, color="black", size=3)+
+      labs(y = "The Sales of Each Brands", x="Date", fill="Brands") +
+theme_light()
+ 
+#p + geom_line() + geom_point()
+#p + geom_line() + geom_point(aes(color=Date))
+
+
+```
+
+```{r faceting}
+#ggplot line
+luxury_data = car_agg %>% filter(brand_name %in% c("BMW", "MERCEDES-BENZ", "AUDI"))
+luxury_data %>% 
+  mutate(date = as.Date(paste(year, month, 1, sep='-'))) %>% 
+  ggplot(data = ., aes(x = date, y = total_total, color = brand_name)) + 
+  labs(y = "The Sales of Each Brands", x="Months", fill="Brands") + 
+  geom_line()+ geom_point()
+
+```
+```{r ggpairs}
+# the ggpairs function from the GGally package to plot all pairs of scatterplots for several variables
+car_agg_summary <-
+  car_agg %>%
+  group_by(year)%>%
+  summarise(total_total=sum(total_total),auto_total=sum(auto_total),comm_total=sum(comm_total))%>%
+  arrange(desc(total_total))
+
+car_agg_summary
+#install.packages("GGally")
+library("GGally")
+ggpairs(car_agg_summary %>% select( total_total, auto_total, comm_total))
+```
+
+```{r ggpairs2}
+
+car_agg_summary_brand <-
+  car_agg %>%
+  group_by(brand_name)%>%
+  summarise(total_total=sum(total_total),auto_total=sum(auto_total),comm_total=sum(comm_total))%>%
+  arrange(desc(total_total))
+
+car_agg_summary_brand
+
+ggplot(car_agg_summary_brand, aes(x = total_total, y = auto_total, color = auto_total)) + 
+  geom_point(size = 3) + 
+  ggtitle("Auto trend in the total cars number") + 
+  xlab("total_total") + ylab("auto_total")+
+ geom_jitter(alpha = 0.3, color = "tomato")+
+    theme(plot.margin = margin(2,.8,2,.8, "cm"),
+        plot.background = element_rect(fill = "darkgrey"))
+
+
+
+
+```
+```{r treemapify}
+library(ggplot2)
+#install.packages("treemapify")
+library(treemapify)   
+ggplot(car_agg_summary_brand, aes(area = total_total, fill = brand_name, label = brand_name)) +
+  geom_treemap() +
+  geom_treemap_text(fontface = "italic", colour = "white", place = "centre", grow = TRUE)+
+  theme(legend.position = "bottom") 
+```
