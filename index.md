@@ -1,7 +1,7 @@
 
 # WELCOME LEYLA YİĞİT GITHUB WEBSITE
 
-![Screenshot] ()
+![Screenshot](pic.jpeg)
 
 
 **I havve different websites separated for datascience domains are listed below**
