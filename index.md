@@ -1,40 +1,53 @@
 
 # WELCOME LEYLA YİĞİT GITHUB WEBSITE
 
-![Screenshot] ()
+![Screenshot](pic.jpeg)
 
 
-**Different websites are listed below**
+**I havve different websites separated for datascience domains are listed below**
 
 ### R WEB SITE
 
-[Click Here for Hadoop Development](https://datalovervisualizer.github.io/LEYLAS_REPO_BIGDATA_R/) for HTML format
+[Click Here for R WEBSITE](https://datalovervisualizer.github.io/LEYLAS_REPO_BIGDATA_R/) for HTML format
 
 
 
-### SHELL
-
-[Click here for Shell Cheatsheet](https://github.com/DATALOVERVISUALIZER/HADOOP-SHELL-MONGODB/blob/master/shell_commands_cheatsheet.xlsx) for xlsx file
-
-[Click here IMDB data Shell Code Examples](https://github.com/DATALOVERVISUALIZER/HADOOP-SHELL-MONGODB/blob/master/shell_code_exercise_with_IMDB_DB.txt)
-
-[Click for IMDB DB properties](https://github.com/DATALOVERVISUALIZER/HADOOP-SHELL-MONGODB/blob/master/imdb_database)
-
-[Click here for my Master School Class Notes](https://github.com/DATALOVERVISUALIZER/HADOOP-SHELL-MONGODB/blob/master/Shell_Mef_University_Class_Notes.txt)
-
-### JSON
-
-[Click JSON data format Analysis](JSON_IMPORTDATA_ANALYSIS_WITH_JUPITER.html)for HTML format
-
-[Click JSON data format Analysis](https://github.com/DATALOVERVISUALIZER/HADOOP-SHELL-MONGODB/blob/master/JSON_IMPORTDATA_ANALYSIS_WITH_JUPITER.ipynb) for ipynb file
-
-### XML
-
-[Click XML data format Analysis](XML_HURRIYET_REALESTATEDATA_ANALYSIS_WITH_JUPITER.html) for HTML format
-
-[Click XML data format Analysis](https://github.com/DATALOVERVISUALIZER/HADOOP-SHELL-MONGODB/blob/master/XML_HURRIYET_REALESTATEDATA_ANALYSIS_WITH_JUPITER.ipynb) for ipynb file
+### HADOOP WEB SITE
 
 
+[Click Here for HADOOP WEBSITE](https://datalovervisualizer.github.io/HADOOP-SHELL-MONGODB/) for HTML format
+
+
+
+### PYTHON AND MACHINE LEARNING
+
+[Click Here for PYTHON AND MACHINE LEARNING WEBSITE](https://datalovervisualizer.github.io/MACHINE_LEARNING_PYTHON/) for HTML format
+
+
+
+### TABLEAU
+
+[Click Here for TABLEAU WEBSITE](https://datalovervisualizer.github.io/LEYLAS_REPO_TABLEAU/) for HTML format
+
+
+
+### LEARNING FROM BOOKS
+
+**Books that I used to study are below. Booklovers should look at them**
+
+[Click for learning resources](https://github.com/DATALOVERVISUALIZER/LEYLAS_REPO/tree/master/BOOKS)
+
+
+
+### SQL
+
+[Click here for some SQL development examples](https://github.com/DATALOVERVISUALIZER/LEYLAS_REPO/tree/master/PLSQL) 
+
+
+
+### SAS
+
+[Click here for some SAS documents](https://github.com/DATALOVERVISUALIZER/LEYLAS_REPO/tree/master/SAS/SAS_MACRO_CODING) for xlsx and doc format
 
 ***
 ***
