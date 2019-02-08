@@ -11,10 +11,12 @@
 [Click Here for R WEBSITE](https://datalovervisualizer.github.io/LEYLAS_REPO_BIGDATA_R/) for HTML format
 
 
+
 ### HADOOP WEB SITE
 
 
 [Click Here for HADOOP WEBSITE](https://datalovervisualizer.github.io/HADOOP-SHELL-MONGODB/) for HTML format
+
 
 
 ### PYTHON AND MACHINE LEARNING
@@ -22,9 +24,11 @@
 [Click Here for PYTHON AND MACHINE LEARNING WEBSITE](https://datalovervisualizer.github.io/MACHINE_LEARNING_PYTHON/) for HTML format
 
 
+
 ### TABLEAU
 
 [Click Here for TABLEAU WEBSITE](https://datalovervisualizer.github.io/LEYLAS_REPO_TABLEAU/) for HTML format
+
 
 
 ### LEARNING FROM BOOKS
@@ -33,9 +37,13 @@
 
 [Click for learning resources](https://github.com/DATALOVERVISUALIZER/LEYLAS_REPO/tree/master/BOOKS)
 
+
+
 ### SQL
 
 [Click here for some SQL development examples](https://github.com/DATALOVERVISUALIZER/LEYLAS_REPO/tree/master/PLSQL) 
+
+
 
 ### SAS
 
