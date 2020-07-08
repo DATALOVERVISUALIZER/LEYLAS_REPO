@@ -1,0 +1,181 @@
+create or replace PACKAGE         pkg_encrypt_cn
+
+AS
+
+  function ENCRYPT_VAL( P_VAL in varchar2 ) return varchar2;
+
+  function DECRYPT_VAL( P_VAL in raw ) return varchar2;
+
+end;
+
+/
+
+ 
+
+create or replace PACKAGE BODY          pkg_encrypt_cn
+
+as
+
+  FUNCTION decrypt_val( p_val IN RAW ) RETURN VARCHAR2 
+
+  IS
+
+    l_decrypted RAW(32);
+
+    l_decrypted_string VARCHAR2(32);
+
+    L_USER  varchar2(32);
+
+    L_CHARACTER_SET varchar2(10);
+
+    L_STRING varchar2(32);
+
+    L_KEY raw(250);
+
+    L_ENCRYPTION_TYPE PLS_INTEGER;
+
+  BEGIN
+
+        L_KEY := UTL_I18N.STRING_TO_RAW
+
+                            ( data => 'A153F5GL8B55R200R9K5B10NEM178D64',
+
+                              DST_CHARSET => 'AL32UTF8' );
+
+        L_ENCRYPTION_TYPE := dbms_crypto.encrypt_aes256
+
+                                        + DBMS_CRYPTO.CHAIN_CBC
+
+                                        + DBMS_CRYPTO.PAD_PKCS5;
+
+ 
+
+        l_decrypted := dbms_crypto.decrypt
+
+                ( SRC => P_VAL,
+
+                  TYP => L_ENCRYPTION_TYPE,
+
+                  key => L_KEY );
+
+ 
+
+        l_decrypted_string := utl_i18n.raw_to_char
+
+                    ( data => l_decrypted ,
+
+                      src_charset => 'AL32UTF8' );
+
+        RETURN l_decrypted_string;
+
+ 
+
+  end DECRYPT_VAL;
+
+ 
+
+  FUNCTION encrypt_val( p_val IN VARCHAR2 ) RETURN VARCHAR2
+
+  is
+
+    L_VAL RAW(32);
+
+    L_ENCRYPTED raw(32);
+
+    L_CHARACTER_SET varchar2(10);
+
+    L_STRING varchar2(32);
+
+    L_KEY RAW(250);
+
+    L_ENCRYPTION_TYPE PLS_INTEGER;
+
+  begin
+
+ 
+
+ 
+
+    L_KEY := UTL_I18N.STRING_TO_RAW
+
+                        ( data => 'A153F5GL8B55R200R9K5B10NEM178D64',
+
+                          DST_CHARSET => 'AL32UTF8' );
+
+    L_ENCRYPTION_TYPE := dbms_crypto.encrypt_aes256
+
+                                    + DBMS_CRYPTO.CHAIN_CBC
+
+                                    + DBMS_CRYPTO.PAD_PKCS5;
+
+    L_VAL := utl_i18n.string_to_raw
+
+              ( data => p_val,
+
+                dst_charset => 'AL32UTF8' );
+
+ 
+
+    L_ENCRYPTED := dbms_crypto.encrypt
+
+                   ( SRC => L_VAL,
+
+                     TYP => L_ENCRYPTION_TYPE,
+
+                     key => L_KEY );
+
+ 
+
+ 
+
+    return L_ENCRYPTED;
+
+  EXCEPTION when OTHERS then
+
+    RETURN SQLCODE||'-'||SQLERRM;
+
+  end ENCRYPT_VAL;
+
+end pkg_encrypt_cn;
+
+/
+
+ 
+
+ 
+
+ 
+
+---Örnek:
+
+ 
+
+select
+
+MM.cust_no,
+
+--MM.TYPE,
+
+--MM.POTENTIAL_CUST_YES_NO_F,
+
+--a.mus_cep_tel,
+
+pkg_encrypt_cn.ENCRYPT_VAL(to_char(MM.mus_cep_tel ))  as mus_cep_tel
+
+from EDWH.TR_1006_MUSTERI_DETAY_T  MM 
+
+where TO_DATE(REPORT_DATE, 'DD/MM/YY')=  TO_DATE(CURRENT_DATE, 'DD/MM/YY')
+
+AND MM.POTENTIAL_CUST_YES_NO_F ='H' --POTANSIYEL MÜÞTERILER ALINMADI.
+
+AND UPPER(MM.TYPE)='G' --sadece gerçek müþteriler alýndý
+
+ 
+
+ 
+
+ 
+
+ 
+
+select to_number(pkg_encrypt_cn.DECRYPT_VAL('EEDA7D0B3526F9E2D910B56895B408CA')) from dual;
