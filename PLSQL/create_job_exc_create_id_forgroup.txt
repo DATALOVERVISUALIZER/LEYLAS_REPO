@@ -1,0 +1,187 @@
+CREATE OR REPLACE PROCEDURE XDWH.PR_GUNLUK_SMS_FREKANS
+
+is
+
+v_db_name             VARCHAR2(12);
+
+v_hostname            VARCHAR2(100);
+
+v_message_header        VARCHAR2(32767);
+
+v_mail_addresses     varchar2(500):= 'e_mail_adresses';
+
+v_sqlerrm varchar2(1000);
+
+v_job_completed boolean default false;
+
+v_mailsend_completed boolean default false;
+
+v_start_date date;
+
+ 
+
+ 
+
+BEGIN
+
+v_start_date:=sysdate;
+
+SELECT trim(instance_name), trim(host_name) INTO v_db_name, v_hostname FROM V$INSTANCE;
+
+v_message_header:='VERITABANI'||chr(9)||': '||v_db_name||chr(10)||'SUNUCU ADI'||chr(9)||': '||v_hostname||chr(10)|| 'JOB ADI         '||chr(9)||': '||'GUNLUK_SMS_FREKANS_JOB'||chr(10);
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+execute immediate  ' TRUNCATE TABLE XDWH.SMS_FREKANS';
+
+COMMIT;
+
+ 
+
+INSERT  /*+ APPEND */  INTO XDWH.SMS_FREKANS
+
+ 
+
+SELECT
+
+TRUNC(Current_date) as ETL_DATE,
+
+(TO_CHAR (Current_date, 'HH24:MI:SS')) AS ETL_TIME,
+
+to_number(lsms.CUSTOMER_NO) AS CUSTOMER_NO ,
+
+lsms.PHONE,
+
+lsms.E_MAIL ,
+
+lsms.CAMPAIGN_TYPE as LAST_CAMPAIGN_TYPE,
+
+lsms.CAMPAIGN_GROUP AS LAST_CAMPAIGN_GROUP,
+
+lsms.SENT_DATE AS LAST_SENT_DATE,
+
+KOD.FREKANS_GRUP_KODU,
+
+TO_DATE(CURRENT_DATE,'dd/mm/yy')- TO_DATE(SENT_DATE,'dd/mm/yy')   ENSONSMS_KACGUN_ONCE
+
+FROM
+
+     (
+
+        SELECT SMS.*,
+
+              RANK() OVER(PARTITION BY CUSTOMER_NO,CAMPAIGN_GROUP ORDER BY SENT_DATE DESC) RNK
+
+        FROM MASTER_CAMP.T_SMS_EMAIL_CONTACT_HISTORY  SMS
+
+              WHERE 1 = 1
+
+              AND UPPER(SMS.CAMPAIGN_TYPE) = 'SMS'
+
+              )    lsms
+
+    inner join
+
+     (
+
+    select
+
+     CAMPAIGN_GROUP,
+
+    ROW_NUMBER() OVER (   ORDER BY CAMPAIGN_GROUP  ) FREKANS_GRUP_KODU
+
+    FROM (select distinct CAMPAIGN_GROUP  from  MASTER_CAMP.T_SMS_EMAIL_CONTACT_HISTORY  SMS  WHERE 1 = 1 AND UPPER(SMS.CAMPAIGN_TYPE) = 'SMS')
+
+    )KOD on kod.CAMPAIGN_GROUP=lsms.CAMPAIGN_GROUP
+
+    WHERE
+
+    1=1
+
+and lsms.RNK=1;
+
+ 
+
+COMMIT;
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+v_job_completed:=true;
+
+v_message_header  := v_message_header ||'ODS PROD DB''DE XDWH''IN GUNLUK_SMS_FREKANS_JOB''I:' ||chr(10)||chr(10);
+
+v_message_header  := v_message_header ||'JOB Start Date  : '||to_char(v_start_date,' dd.mm.yyyy hh24:mi:ss')||chr(10)||'JOB  End  Date  : '||to_char(sysdate,' dd.mm.yyyy hh24:mi:ss')||chr(10)||chr(10);
+
+DBADATA.SMTP.MAIL(V_DB_NAME||'@'||V_HOSTNAME,v_mail_addresses,'BILGILENDIRME: XDWH.GUNLUK_SMS_FREKANS_JOB-> Basarili Tamamlandi',v_message_header);
+
+INSERT INTO XDWH.JOB_LOG
+
+VALUES(V_DB_NAME||'@'||V_HOSTNAME, v_mail_addresses,'BILGILENDIRME: XDWH.GUNLUK_SMS_FREKANS_JOB -> Basarili Tamamlandi',v_message_header,SYSDATE);
+
+COMMIT;
+
+v_mailsend_completed:=true;
+
+exception when others then
+
+BEGIN
+
+      v_sqlerrm :='Hata: '||SQLERRM;
+
+      if v_job_completed=false then
+
+          v_message_header  := chr(10)||'!!!!!!! UYARI: XDWH.GUNLUK_SMS_FREKANS_JOB HATALI TAMAMLANDI!!!!!!!'  ||chr(10)||chr(10)||v_message_header;
+
+          v_message_header  := v_message_header || 'ODS PROD DB''DE XDWH''IN GUNLUK_SMS_FREKANS_JOB''I HATA ALDI' ||chr(10)||chr(10)||'ALINAN HATA:'||v_sqlerrm;
+
+          INSERT INTO XDWH.JOB_LOG
+
+          VALUES(V_DB_NAME||'@'||V_HOSTNAME,v_mail_addresses,'UYARI: XDWH.GUNLUK_SMS_FREKANS_JOB HATALI TAMAMLANDI!!!!!!!',v_message_header||chr(10)||v_sqlerrm,SYSDATE);
+
+          COMMIT;
+
+          DBADATA.SMTP.MAIL(V_DB_NAME||'@'||V_HOSTNAME,v_mail_addresses,'UYARI: XDWH.GUNLUK_SMS_FREKANS_JOB  HATALI TAMAMLANDI!!!!!!!',v_message_header||chr(10)||v_sqlerrm||chr(10)||chr(10));
+
+ 
+
+      elsif v_job_completed=true and v_mailsend_completed=false then
+
+           v_message_header  := v_message_header || 'ODS PROD DB''DE XDWH''IN GUNLUK_SMS_FREKANS_JOB''I Basarili Tamamlandi FAKAT MAIL GÖNDERIMI HATA ALDI!!!!!!!' ||chr(10)||chr(10)||'ALINAN HATA:'||v_sqlerrm;
+
+           INSERT INTO XDWH.JOB_LOG
+
+           VALUES(V_DB_NAME||'@'||V_HOSTNAME,v_mail_addresses,'UYARI: XDWH.GUNLUK_SMS_FREKANS_JOB  Basarili Tamamlandi Fakat MAIL GÖNDERIMI HATA ALDI!!!!!!!',v_message_header||chr(10)||v_sqlerrm,SYSDATE);
+
+           COMMIT;
+
+      end if;
+
+END;
+
+ 
+
+END;
+
+ 
+
+ 
+
+ 
