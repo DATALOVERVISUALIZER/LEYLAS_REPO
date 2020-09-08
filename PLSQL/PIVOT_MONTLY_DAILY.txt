@@ -1,0 +1,1565 @@
+CREATE OR REPLACE PROCEDURE XDWH.PR_SMS_DASHBOARD
+
+is
+
+v_db_name             VARCHAR2(12);
+
+v_hostname            VARCHAR2(100);
+
+v_message_header        VARCHAR2(32767);
+
+v_mail_addresses     varchar2(500):= 'leyla.yigit@fibabanka.com.tr;Kerim.Acar@fibabanka.com.tr;neslihan.demir@fibabanka.com.tr;aysu.mert@fibabanka.com.tr;Ismail.Aydin@fibabanka.com.tr;Levent.Gume@fibabanka.com.tr';
+
+v_sqlerrm varchar2(1000);
+
+v_job_completed boolean default false;
+
+v_mailsend_completed boolean default false;
+
+v_start_date date;
+
+BEGIN
+
+v_start_date:=sysdate;
+
+SELECT trim(instance_name), trim(host_name) INTO v_db_name, v_hostname FROM V$INSTANCE;
+
+v_message_header:='VERITABANI'||chr(9)||': '||v_db_name||chr(10)||'SUNUCU ADI'||chr(9)||': '||v_hostname||chr(10)|| 'JOB ADI         '||chr(9)||': '||'SMS_DASHBOARD_JOB'||chr(10);
+
+ 
+
+ 
+
+---Müsterinin en son SMS'ine en yakin (recent) RISK degeri alinir.
+
+--- Oncelikle en son SMS 'i bulunur. Sonrasinda bu tarihten kucuk application_date'e sahip olanlar alinir. Bu application date'lerden en sonuncusu alinir.
+
+/*
+
+Bu procedure ile dolan tablolar :
+
+XDWH.TEMP_SMSDATE_KCK_ENBYK_RISK_A
+
+XDWH.SMSDASHBOARD_SMS_RISK_LOG
+
+XDWH.SMSDASHBOARD_SMS_LOG
+
+XDWH.BIREYSEL_KRD_SMS_ANALIZI_G
+
+XDWH.BRYSL_KRD_RISK_SMS_ANALIZI_G
+
+XDWH.BRYSL_KRD_MODEL_SMS_ANALIZI_G
+
+XDWH.CSA_SMS_ANALIZI_G
+
+XDWH.POAS_SMS_ANALIZI_G
+
+*/
+
+ 
+
+ 
+
+execute immediate  'truncate table XDWH.TEMP_SMSDATE_KCK_ENBYK_RISK_A';
+
+COMMIT;
+
+ 
+
+ 
+
+ 
+
+ 
+
+INSERT  /*+ APPEND */  INTO  XDWH.TEMP_SMSDATE_KCK_ENBYK_RISK_A
+
+(
+
+SELECT * FROM
+
+(
+
+      SELECT
+
+      DISTINCT
+
+        TRUNC(Current_date) as ETL_DATE,
+
+         (TO_CHAR (Current_date, 'HH24:MI:SS')) AS ETL_TIME,
+
+      RANK() OVER(PARTITION BY MM.MUSTERI_NUMARASI ORDER BY A.APPLICATIONDATETIME DESC) RNK  ,
+
+      B.NATIONALIDENTITYNO,
+
+      MM.MUSTERI_NUMARASI,
+
+      to_date(to_date(APPLICATIONDATETIME, 'YYYYMMDDHH24MISS'),'DD/MM/YY') APPLICATIONDATE,
+
+      TO_DATE(SMS.SENT_DATE, 'DD/MM/YY') SENT_DATE,
+
+       TO_DATE(SMS.SENT_DATE, 'DD/MM/YY') -to_date(to_date(APPLICATIONDATETIME, 'YYYYMMDDHH24MISS'),'DD/MM/YY')  SMS_RISKTRH_FARK, --application date , SMS sent_date'den kucuk mu?
+
+     CONCAT(TO_CHAR(SUBSTR(UPPER(EXPERIANFIELDNAME),9,10)),TO_CHAR(FIELDVALUE)) AS RISK_SEGMENT
+
+      FROM RBF.EXPERIANLOG2@DL_ODS_ARC  A
+
+     LEFT JOIN RBF.APPLICATION_ALL_VW B ON A.APPLICATIONNO=B.APPLICATIONNO
+
+     INNER JOIN MASTER_CAMP.VW_MUSTERI   MM ON (MM.TC_KIMLIK_NO)=TO_CHAR(B.NATIONALIDENTITYNO)
+
+     LEFT JOIN --- müsterinin son 1 aydaki en son sms 'i bulunur. X KREDI ve KREDI TEKLIFI için
+
+             (
+
+             SELECT * FROM
+
+                   ( SELECT
+
+                           CUSTOMER_NO,
+
+                           CAMPAIGN_TYPE,
+
+                           CAMPAIGN_NAME,
+
+                           CAMPAIGN_GROUP,
+
+                           TO_DATE(SMS.SENT_DATE_TIME, 'DD/MM/YYYY') AS  SENT_DATE,
+
+                           RANK() OVER(PARTITION BY CUSTOMER_NO ORDER BY SENT_DATE DESC) RNK
+
+                         FROM MASTER_CAMP.T_SMS_EMAIL_CONTACT_HISTORY sms
+
+                         WHERE
+
+                         1=1
+
+                         AND UPPER(SMS.CAMPAIGN_TYPE) = 'SMS' -- tabloya yalnizda SMS filtresi verilir
+
+                         AND  (SMS.CAMPAIGN_GROUP = 'Kredi_Teklifi')
+
+                         ---OR SMS.CAMPAIGN_GROUP = 'X_Kredi_Teklifi')
+
+                         AND TO_DATE(SMS.SENT_DATE, 'DD/MM/YY') >= TO_DATE('01/04/19', 'DD/MM/YY')  --- dashboard baslangic trh
+
+ 
+
+                   )
+
+             WHERE
+
+             1=1
+
+             AND RNK=1
+
+             --AND customer_no=57705
+
+              )
+
+      SMS ON to_number(SMS.CUSTOMER_NO)=to_number( MM.MUSTERI_NUMARASI)
+
+      WHERE
+
+      1=1
+
+      AND SUBSTR(UPPER(EXPERIANFIELDNAME),9,10)='RL' -- tabloda birden fazla veri oldugundan ilgili konu seçilmistir.
+
+      AND SUBSTR(UPPER(EXPERIANFIELDNAME),-4)!= 'URUN'
+
+      AND APPLICATIONSTATE='FINAL PRE-APPROVED' --önonay approved
+
+    -- AND MM.MUSTERI_NUMARASI= 2331  --21/03/19  i RL1
+
+    AND  to_date(to_date(APPLICATIONDATETIME, 'YYYYMMDDHH24MISS'),'DD/MM/YY')<= TO_DATE(SMS.SENT_DATE, 'DD/MM/YY') -- SMS trh'ine en yakin risk tarihi alinir.
+
+)
+
+WHERE
+
+1=1
+
+AND RNK=1
+
+);
+
+ 
+
+COMMIT;
+
+/* coklayan müsteri kontrolü
+
+select MUSTERI_NUMARASI, count(MUSTERI_NUMARASI)
+
+from TEMP_SMSDATE_KCK_ENBYK_RISK_a
+
+group by MUSTERI_NUMARASI
+
+having count(MUSTERI_NUMARASI)>1
+
+*/
+
+ 
+
+ 
+
+/* RISk güncel kontrol
+
+select  count(distinct  MUSTERI_NUMARASI)
+
+from TEMP_SMSDATE_KCK_ENBYK_RISK_a
+
+where
+
+1=1
+
+AND SMS_RISKTRH_FARK>30
+
+--11123
+
+*/
+
+ 
+
+ 
+
+--- select count(*) from XDWH.TEMP_SMSDATE_KCK_ENBYK_RISK_a  --730837 kayitli tabloda
+
+--608088
+
+---------------------------------------------------------------------------------- SMS LOG TABLOSU --------------------------
+
+execute immediate  'truncate table XDWH.SMSDASHBOARD_SMS_RISK_LOG';
+
+ 
+
+COMMIT;
+
+ 
+
+ 
+
+ 
+
+INSERT  /*+ APPEND */  INTO  XDWH.SMSDASHBOARD_SMS_RISK_LOG
+
+SELECT
+
+DISTINCT
+
+  TRUNC(Current_date) as ETL_DATE,
+
+         (TO_CHAR (Current_date, 'HH24:MI:SS')) AS ETL_TIME,
+
+SMS_MAINGRUP.CUSTOMER_NO as  MUSTERI_NUMARASI,
+
+SMS_MAINGRUP.SENT_DATE AS SMS_SENT_DATE,
+
+EXTRACT(YEAR FROM SMS_MAINGRUP.SENT_DATE) SMS_SENT_YEAR,
+
+EXTRACT(MONTH FROM SMS_MAINGRUP.SENT_DATE) SMS_SENT_MONTH,
+
+RISK.RISK_SEGMENT,
+
+RISK.APPLICATIONDATE,
+
+RISK.SENT_DATE as RISK_SMS_SENT_DATE,
+
+SMS_MAINGRUP.CAMPAIGN_GROUP,
+
+SMS_MAINGRUP.CAMPAIGN_NAME, -- müsteri için birden fazla campaign name oldugundan atayi coklar
+
+SMS_MAINGRUP.SMS_GROUP_NAME,
+
+SMS_MAINGRUP.SMS_GROUP_NAME_ID ,
+
+TO_DATE(IK.KREDI_KULLANDIRIM_TARIHI, 'dd.mm.yy')-TO_DATE(SMS_MAINGRUP.SENT_DATE, 'dd.mm.yy') AS KKT_SMSDATE_FARK ,
+
+TO_DATE(IK.KREDI_KULLANDIRIM_TARIHI, 'dd.mm.yy') AS KREDI_KULLANDIRIM_TARIHI,
+
+ALT_URUN_KODU AS KRD_ALT_URUN_KODU,
+
+ALT_URUN_ADI AS KRD_ALT_URUN_ADI,
+
+CASE WHEN  SMS_MAINGRUP.SMS_GROUP_NAME_ID = 3 THEN
+
+  (CASE WHEN  SMS_MAINGRUP.CAMPAIGN_NAME like '%TasitKredisi%'  THEN 'TasitKredisi'
+
+   WHEN  SMS_MAINGRUP.CAMPAIGN_NAME like '%Model%'  THEN 'Model'
+
+  ELSE  SMS_MAINGRUP.SMS_GROUP_NAME  END
+
+    )
+
+    ELSE SMS_MAINGRUP.SMS_GROUP_NAME
+
+      END AS SMS_SUB_GROUP_NAME,
+
+CASE WHEN  SMS_MAINGRUP.SMS_GROUP_NAME_ID = 3 THEN
+
+  (CASE WHEN  SMS_MAINGRUP.CAMPAIGN_NAME like '%TasitKredisi%'  THEN  4
+
+   WHEN  SMS_MAINGRUP.CAMPAIGN_NAME like '%Model%'  THEN 5
+
+  ELSE  3  END
+
+  )
+
+    ELSE SMS_MAINGRUP.SMS_GROUP_NAME_ID
+
+      END AS SMS_SUB_GROUP_NAME_ID
+
+ 
+
+FROM
+
+(
+
+        SELECT
+
+        SMS.CUSTOMER_NO  ,
+
+        TO_DATE(SMS.SENT_DATE, 'DD/MM/YY') AS SENT_DATE,
+
+        SMS.CAMPAIGN_GROUP,
+
+        CAMPAIGN_NAME,
+
+        CASE WHEN SMS.CAMPAIGN_GROUP = 'X_Kredi_Teklifi'
+
+                           AND
+
+                           (
+
+ 
+
+                                       SUBSTR(CAMPAIGN_NAME, 1, 11) = 'Carrefoursa'
+
+                                      OR (SUBSTR(CAMPAIGN_NAME, 1, 11))= 'Carrefoursa'
+
+                                        OR UPPER(SUBSTR(CAMPAIGN_NAME, 1, 11)) = 'Carrefoursa'
+
+                                        OR UPPER(CAMPAIGN_NAME) LIKE 'CARREFOURSA'
+
+                                        OR (CAMPAIGN_NAME) like '%Carrefoursa%'
+
+                                        OR (CAMPAIGN_NAME) LIKE 'Carrefoursa'
+
+                                        OR UPPER(CAMPAIGN_NAME)= '%CARREFOURSA%'
+
+                                        OR SUBSTR(CAMPAIGN_NAME, 1, 11)= 'CARREFOURSA' --KREDI TEKLIFI KEYWORDU ILE SMS ATILAN MÜSTERILER
+
+                                       OR UPPER(SUBSTR(CAMPAIGN_NAME, 1, 11))= 'CARREFOURSA'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 1, 11))= 'carrefoursa'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 14, 11))= 'carrefoursa'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 15, 11))= 'carrefoursa'
+
+                                       OR  SUBSTR(CAMPAIGN_NAME, 1, 11) = 'Carrefoursa'
+
+                                       OR UPPER(SUBSTR(CAMPAIGN_NAME, 1, 11)) = 'Carrefoursa'
+
+                                       OR UPPER(CAMPAIGN_NAME) LIKE 'CARREFOURSA'
+
+                                       OR (CAMPAIGN_NAME) LIKE 'Carrefoursa'
+
+                                       -- OR UPPER(CAMPAIGN_NAME) LIKE '%POAS%'
+
+                                       OR lower(CAMPAIGN_NAME) LIKE '%csa%'
+
+                                       OR UPPER(CAMPAIGN_NAME) LIKE '%CARREFOURSA%'
+
+                                       OR  UPPER(SUBSTR(CAMPAIGN_NAME, 1, 11))= 'CARREFOURSA'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 1, 11))= 'carrefoursa'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 14, 11))= 'carrefoursa'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 15, 11))= 'carrefoursa'
+
+                                      OR   UPPER(CAMPAIGN_NAME) LIKE '%Carrefoursa_Kredi_Teklifi%'
+
+                                       OR   UPPER(CAMPAIGN_NAME) LIKE '%CarrefoursaYazlik_Kredi_Teklifi%'
+
+                                     OR UPPER(SUBSTR(CAMPAIGN_NAME, 1, 3))= 'CAR'
+
+                                      OR UPPER(SUBSTR(CAMPAIGN_NAME, 2, 4))='%ARRE%'
+
+                         )
+
+           THEN 'CSA_SMS'
+
+           WHEN SMS.CAMPAIGN_GROUP = 'X_Kredi_Teklifi'  AND
+
+                                    ( UPPER(CAMPAIGN_NAME) LIKE '%POAS%'
+
+                                     OR LOWER(SUBSTR(CAMPAIGN_NAME, 14, 3))= 'poa'
+
+                                     OR LOWER(SUBSTR(CAMPAIGN_NAME, 15, 3))= 'poa'
+
+                                     OR UPPER(SUBSTR(CAMPAIGN_NAME, 14, 3))= 'POA'
+
+                                     OR UPPER(SUBSTR(CAMPAIGN_NAME, 15, 3))= 'POA'
+
+                                     OR (SUBSTR(CAMPAIGN_NAME, 14, 4))= '%POAS%'
+
+                                     OR (SUBSTR(CAMPAIGN_NAME, 15, 4))= '%POAS%'
+
+                                     OR (SUBSTR(CAMPAIGN_NAME, 1, 4))= '%POAS%'
+
+                                     OR  UPPER(CAMPAIGN_NAME) LIKE '%POAS%'
+
+                                     OR UPPER(CAMPAIGN_NAME) LIKE '%PO%'
+
+                                     )
+
+          THEN 'POAS_SMS'
+
+         WHEN SMS.CAMPAIGN_GROUP = 'Kredi_Teklifi' THEN 'BIREYSEL_KRD_SMS'
+
+           ELSE 'DIGER_SMS'
+
+            END AS SMS_GROUP_NAME ,
+
+        CASE WHEN SMS.CAMPAIGN_GROUP = 'X_Kredi_Teklifi'
+
+                           AND
+
+                           (
+
+                                       SUBSTR(CAMPAIGN_NAME, 1, 11) = 'Carrefoursa'
+
+                                      OR (SUBSTR(CAMPAIGN_NAME, 1, 11))= 'Carrefoursa'
+
+                                        OR UPPER(SUBSTR(CAMPAIGN_NAME, 1, 11)) = 'Carrefoursa'
+
+                                        OR UPPER(CAMPAIGN_NAME) LIKE 'CARREFOURSA'
+
+                                        OR (CAMPAIGN_NAME) like '%Carrefoursa%'
+
+                                        OR (CAMPAIGN_NAME) LIKE 'Carrefoursa'
+
+                                        OR UPPER(CAMPAIGN_NAME)= '%CARREFOURSA%'
+
+                                        OR SUBSTR(CAMPAIGN_NAME, 1, 11)= 'CARREFOURSA' --KREDI TEKLIFI KEYWORDU ILE SMS ATILAN MÜSTERILER
+
+                                       OR UPPER(SUBSTR(CAMPAIGN_NAME, 1, 11))= 'CARREFOURSA'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 1, 11))= 'carrefoursa'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 14, 11))= 'carrefoursa'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 15, 11))= 'carrefoursa'
+
+                                       OR  SUBSTR(CAMPAIGN_NAME, 1, 11) = 'Carrefoursa'
+
+                                       OR UPPER(SUBSTR(CAMPAIGN_NAME, 1, 11)) = 'Carrefoursa'
+
+                                       OR UPPER(CAMPAIGN_NAME) LIKE 'CARREFOURSA'
+
+                                       OR (CAMPAIGN_NAME) LIKE 'Carrefoursa'
+
+                                       -- OR UPPER(CAMPAIGN_NAME) LIKE '%POAS%'
+
+                                       OR lower(CAMPAIGN_NAME) LIKE '%csa%'
+
+                                       OR UPPER(CAMPAIGN_NAME) LIKE '%CARREFOURSA%'
+
+                                       OR  UPPER(SUBSTR(CAMPAIGN_NAME, 1, 11))= 'CARREFOURSA'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 1, 11))= 'carrefoursa'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 14, 11))= 'carrefoursa'
+
+                                       OR LOWER(SUBSTR(CAMPAIGN_NAME, 15, 11))= 'carrefoursa'
+
+                                      OR   UPPER(CAMPAIGN_NAME) LIKE '%Carrefoursa_Kredi_Teklifi%'
+
+                                       OR   UPPER(CAMPAIGN_NAME) LIKE '%CarrefoursaYazlik_Kredi_Teklifi%'
+
+                                        OR UPPER(SUBSTR(CAMPAIGN_NAME, 1, 3))= 'CAR'
+
+                                        OR UPPER(SUBSTR(CAMPAIGN_NAME, 2, 4))='%ARRE%'
+
+ 
+
+                         )
+
+           THEN  1
+
+           WHEN SMS.CAMPAIGN_GROUP = 'X_Kredi_Teklifi'  AND
+
+                                    ( UPPER(CAMPAIGN_NAME) LIKE '%POAS%'
+
+                                     OR LOWER(SUBSTR(CAMPAIGN_NAME, 14, 3))= 'poa'
+
+                                     OR LOWER(SUBSTR(CAMPAIGN_NAME, 15, 3))= 'poa'
+
+                                     OR UPPER(SUBSTR(CAMPAIGN_NAME, 14, 3))= 'POA'
+
+                                     OR UPPER(SUBSTR(CAMPAIGN_NAME, 15, 3))= 'POA'
+
+                                     OR (SUBSTR(CAMPAIGN_NAME, 14, 4))= '%POAS%'
+
+                                     OR (SUBSTR(CAMPAIGN_NAME, 15, 4))= '%POAS%'
+
+                                     OR (SUBSTR(CAMPAIGN_NAME, 1, 4))= '%POAS%'
+
+                                     OR  UPPER(CAMPAIGN_NAME) LIKE '%POAS%'
+
+                                     OR UPPER(CAMPAIGN_NAME) LIKE '%PO%'
+
+                                     )
+
+          THEN 2
+
+         WHEN SMS.CAMPAIGN_GROUP = 'Kredi_Teklifi' THEN 3
+
+             ELSE 0
+
+            END AS SMS_GROUP_NAME_ID
+
+        FROM MASTER_CAMP.T_SMS_EMAIL_CONTACT_HISTORY SMS
+
+        WHERE 1 = 1
+
+        AND UPPER(SMS.CAMPAIGN_TYPE) = 'SMS' -- tabloya yalnizda SMS filtresi verilir
+
+) SMS_MAINGRUP
+
+-------------RISK
+
+LEFT JOIN XDWH.TEMP_SMSDATE_KCK_ENBYK_RISK_a  RISK  ON  to_number(SMS_MAINGRUP.CUSTOMER_NO)=To_number(RISK.MUSTERI_NUMARASI) ---müsterinin RISK statusunu getirir.Bu statu en son atilan sms tarihine en yakin application_date'deki statue'dur.
+
+LEFT JOIN
+
+(
+
+      SELECT
+
+       DISTINCT
+
+      MUSTERI_NUMARASI,
+
+      ALT_URUN_KODU,
+
+      ALT_URUN_ADI,
+
+      IK.KREDI_KULLANDIRIM_TARIHI
+
+      FROM MASTER_CAMP.CC_KREDI_BIREYSEL_F IK
+
+      WHERE 1 = 1
+
+      -- AND MUSTERI_NUMARASI= 2045908
+
+      AND IK.PARA_BIRIMI = 'TRY'
+
+      AND TO_NUMBER(URUN_TIPI) = 1
+
+      AND TO_NUMBER(URUN_KODU) IN( 01,02,04)
+
+      AND (ALT_URUN_KODU)
+
+      IN  ('5B','92','0B','0B','5E','5C','5G','5C','5B','0B','5B','5E','5G','23','5E','5E','84','89','24',
+
+      '0B','68','91','92','0B','5C','0B','5B','5C','0B','0B','91','4Y','77','2','87','31','14','16','15','82',
+
+      '61','3','47','2','1','1','2','1','38','39','43','43','43','4','3R','5T')
+
+      AND UPPER (substr(KREDI_DURUMU,1,6))!='KULLAN' --  KULLANDIRIM IPTAL krediler elenmistir.
+
+) IK  ON to_number(IK.MUSTERI_NUMARASI)=to_number(SMS_MAINGRUP.CUSTOMER_NO)
+
+WHERE
+
+1=1
+
+AND SMS_MAINGRUP.SMS_GROUP_NAME_ID!=0    -- Hedef olan Bireysel kredi, POAS ve CSA disindaki SMS konulari analize dahil degildir.  0 olarak maplenmislerdir.
+
+AND TO_DATE(SMS_MAINGRUP.SENT_DATE, 'DD/MM/YY') >= TO_DATE('01/04/19', 'DD/MM/YY') ; --- dashboard baslangic trh
+
+--AND SMS_MAINGRUP.CUSTOMER_NO=2152308
+
+ 
+
+COMMIT;
+
+ 
+
+ 
+
+--- select count(*)   from SMSDASHBOARD_SMS_RISK_LOG     7.147.939
+
+ 
+
+ 
+
+ 
+
+/*
+
+  select  *   from SMSDASHBOARD_SMS_RISK_LOG
+
+where MUSTERI_NUMARASI=1098195
+
+*/
+
+ 
+
+/* coklayan müsteri kontrolü
+
+select MUSTERI_NUMARASI, count(MUSTERI_NUMARASI)
+
+from SMSDASHBOARD_SMS_RISK_LOG
+
+group by MUSTERI_NUMARASI
+
+having count(MUSTERI_NUMARASI)>1
+
+order by 2 DESC
+
+*/
+
+ 
+
+ 
+
+---------------- SMS LOG
+
+execute immediate  'truncate table XDWH.SMSDASHBOARD_SMS_LOG';
+
+COMMIT;
+
+ 
+
+INSERT  /*+ APPEND */  INTO  XDWH.SMSDASHBOARD_SMS_LOG
+
+SELECT
+
+DISTINCT
+
+  TRUNC(Current_date) as ETL_DATE,
+
+   (TO_CHAR (Current_date, 'HH24:MI:SS')) AS ETL_TIME,
+
+   SLOG.MUSTERI_NUMARASI,
+
+    SLOG.SMS_SENT_DATE,
+
+    SLOG.SMS_SENT_YEAR,
+
+    SLOG.SMS_SENT_MONTH,
+
+    SLOG.CAMPAIGN_GROUP,
+
+   SLOG.CAMPAIGN_NAME,
+
+   SLOG.SMS_GROUP_NAME,
+
+   SLOG.SMS_GROUP_NAME_ID,
+
+   SLOG.SMS_SUB_GROUP_NAME,
+
+   SLOG.SMS_SUB_GROUP_NAME_ID
+
+                   FROM
+
+                    XDWH.SMSDASHBOARD_SMS_RISK_LOG SLOG
+
+                      where
+
+                    1=1;
+
+                     -- and  musteri_numarasi=355607
+
+ 
+
+COMMIT;
+
+ 
+
+ 
+
+-------------------------------------------------------------------------------------------- ANA DASHBOARD  --------------------------------------
+
+----*************************************************************************************************************************KREDILER  ********************
+
+---
+
+-------------------------------BIREYSEL KREDILER ------------- SMS GROUP NAME
+
+execute immediate  'truncate table XDWH.BIREYSEL_KRD_SMS_ANALIZI_G';
+
+COMMIT;
+
+ 
+
+ 
+
+INSERT /*APPEND*/ INTO XDWH.BIREYSEL_KRD_SMS_ANALIZI_G
+
+(
+
+      SELECT *FROM
+
+     (
+
+      SELECT
+
+ 
+
+         'BIREYSEL_KREDILER_SMS_ANALIZI_GUNLUK' AS REPORT_NAME,
+
+         TRUNC(Current_date) as ETL_DATE,
+
+        (TO_CHAR (Current_date, 'HH24:MI:SS')) AS ETL_TIME,
+
+         TOPLAM_SMS.SMS_GROUP_NAME,
+
+      TOPLAM_SMS.SMS_SENT_YEAR,
+
+      TOPLAM_SMS.SMS_SENT_MONTH,
+
+      TO_CHAR(TOPLAM_SMS.SMS_SENT_DATE,'DD/MM/YY') AS SMS_SENT_DATE,
+
+      TOPLAM_SMS.Toplam_SMS_ADET,
+
+      (NVL("0_GUN_ADET",0)) AS SIFIR_GUN_ADET ,
+
+      (ROUND((NVL("0_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS SIFIR_GUN_ORAN ,
+
+      (NVL("1_GUN_ADET",0)) AS BIR_GUN_ADET,
+
+      (ROUND((NVL("1_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS BIR_GUN_ORAN ,
+
+      (NVL("2_GUN_ADET",0)) AS IKI_GUN_ADET,
+
+      (ROUND((NVL("2_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS IKI_GUN_ORAN ,
+
+      (NVL("3_GUN_ADET",0)) AS UC_GUN_ADET,
+
+      (ROUND((NVL("3_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS UC_GUN_ORAN,
+
+      (NVL("4_GUN_ADET",0)) AS DORT_GUN_ADET,
+
+      (ROUND((NVL("4_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS DORT_GUN_ORAN,
+
+      (NVL("5_GUN_ADET",0) ) AS BES_GUN_ADET,
+
+      (ROUND((NVL("5_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS BES_GUN_ORAN,
+
+      (NVL("6_GUN_ADET",0)) AS ALTI_GUN_ADET,
+
+      (ROUND((NVL("6_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS ALTI_GUN_ORAN,
+
+      (NVL("7_GUN_ADET",0)) AS YEDI_GUN_ADET,
+
+      (ROUND((NVL("7_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS YEDI_GUN_ORAN ,
+
+      (NVL("8_GUN_ADET",0))AS SEKIZ_GUN_ADET,
+
+      (ROUND((NVL("8_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS SEKIZ_GUN_ORAN,
+
+      (NVL("9_GUN_ADET",0)) AS DOKUZ_GUN_ADET,
+
+      (ROUND((NVL("9_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS DOKUZ_GUN_ORAN ,
+
+      (NVL("0_GUN_ADET",0)+NVL("1_GUN_ADET",0)+NVL("2_GUN_ADET",0)+NVL("3_GUN_ADET",0)+NVL("4_GUN_ADET",0)+NVL("5_GUN_ADET",0)+NVL("6_GUN_ADET",0)+NVL("7_GUN_ADET",0)+NVL("8_GUN_ADET",0)+NVL("9_GUN_ADET",0)) AS Toplam_KK,
+
+      ROUND((NVL("0_GUN_ADET",0)+NVL("1_GUN_ADET",0)+NVL("2_GUN_ADET",0)+NVL("3_GUN_ADET",0)+NVL("4_GUN_ADET",0)+NVL("5_GUN_ADET",0)+NVL("6_GUN_ADET",0)+NVL("7_GUN_ADET",0)+NVL("8_GUN_ADET",0)+NVL("9_GUN_ADET",0))/TOPLAM_SMS.Toplam_SMS_ADET,4) AS Toplam_KK_ORAN
+
+      FROM
+
+      ---- günlük toplam sms
+
+      (
+
+      Select
+
+      --SLOG.MUSTERI_NUMARASI,
+
+      SLOG.SMS_GROUP_NAME,
+
+      SLOG.SMS_SENT_YEAR,
+
+      SLOG.SMS_SENT_MONTH,
+
+      SLOG.SMS_SENT_DATE,
+
+      count(SLOG.MUSTERI_NUMARASI) as Toplam_SMS_ADET
+
+      from XDWH.SMSDASHBOARD_SMS_LOG SLOG
+
+      WHERE
+
+      1=1
+
+      AND SLOG.SMS_GROUP_NAME_ID=3 -- bireysel KRD
+
+      group by
+
+      SLOG.SMS_GROUP_NAME,
+
+      SLOG.SMS_SENT_YEAR,
+
+      SLOG.SMS_SENT_MONTH,
+
+      SLOG.SMS_SENT_DATE
+
+      --SLOG.MUSTERI_NUMARASI
+
+      )TOPLAM_SMS
+
+      LEFT JOIN
+
+      (
+
+            SELECT * FROM
+
+            (Select
+
+            --SLOG.MUSTERI_NUMARASI,
+
+            SLOG.SMS_GROUP_NAME,
+
+            SLOG.SMS_SENT_YEAR,
+
+            SLOG.SMS_SENT_MONTH,
+
+            SLOG.SMS_SENT_DATE,
+
+            KKT_SMSDATE_FARK,
+
+            count(SLOG.MUSTERI_NUMARASI) toplam_adet
+
+            from XDWH.SMSDASHBOARD_SMS_RISK_LOG SLOG
+
+            WHERE
+
+            1=1
+
+            AND SLOG.SMS_GROUP_NAME_ID=3 -- bireysel KRD
+
+            AND KKT_SMSDATE_FARK>=0  AND KKT_SMSDATE_FARK<=9 --AND KKT_SMSDATE_FARK<=9-- KRedi kullandirim tarihi sms date'den buyuk ise SMS etkisinin kredi kullaniminda etkili oldugu düsünülür
+
+            AND  (KRD_ALT_URUN_KODU)
+
+            IN  ('5B','92','0B','0B','5E','5C','5G','5C','5B','0B','5B','5E','5G','23','5E','5E','84','89','24',
+
+            '0B','68','91','92','0B','5C','0B','5B','5C','0B','0B','91','4Y','77','2','87','31','14','16','15','82',
+
+            '61','3','47','2','1','1','2','1','38','39','43','43','43','4') --- sadece bireysel krediye dönenler
+
+            group by
+
+            SLOG.SMS_GROUP_NAME,
+
+            SLOG.SMS_SENT_YEAR,
+
+            SLOG.SMS_SENT_MONTH,
+
+            SLOG.SMS_SENT_DATE,
+
+            KKT_SMSDATE_FARK
+
+            )
+
+            PIVOT
+
+            (
+
+            sum(toplam_adet) "GUN_ADET"
+
+            FOR KKT_SMSDATE_FARK  IN (0,1,2,3,4,5,6,7,8,9)
+
+            )
+
+      )KK
+
+       ON  TOPLAM_SMS.SMS_GROUP_NAME=KK.SMS_GROUP_NAME
+
+       AND TOPLAM_SMS.SMS_SENT_YEAR=KK.SMS_SENT_YEAR
+
+       AND TOPLAM_SMS.SMS_SENT_MONTH=KK.SMS_SENT_MONTH
+
+       AND TOPLAM_SMS.SMS_SENT_DATE=KK.SMS_SENT_DATE
+
+      )
+
+      ---------------------AYLIK TOPLAM
+
+      UNION ALL
+
+      (
+
+      SELECT
+
+         'BIREYSEL_KREDILER_SMS_ANALIZI_GUNLUK' AS REPORT_NAME,
+
+          TRUNC(Current_date) as ETL_DATE,
+
+         (TO_CHAR (Current_date, 'HH24:MI:SS')) AS ETL_TIME,
+
+      TOPLAM_SMS.SMS_GROUP_NAME,
+
+      TOPLAM_SMS.SMS_SENT_YEAR,
+
+      TOPLAM_SMS.SMS_SENT_MONTH,
+
+      'AYLIK_TOPLAM' AS SMS_SENT_DATE,
+
+      TOPLAM_SMS.Toplam_SMS_ADET,
+
+      (NVL("0_GUN_ADET",0)) AS  SIFIR_GUN_ADET ,
+
+      (ROUND((NVL("0_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS SIFIR_GUN_ORAN ,
+
+      (NVL("1_GUN_ADET",0)) AS BIR_GUN_ADET,
+
+      (ROUND((NVL("1_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS BIR_GUN_ORAN,
+
+      (NVL("2_GUN_ADET",0)) AS  IKI_GUN_ADET,
+
+      (ROUND((NVL("2_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS IKI_GUN_ORAN,
+
+      (NVL("3_GUN_ADET",0)) AS UC_GUN_ADET,
+
+      (ROUND((NVL("3_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS UC_GUN_ORAN,
+
+      (NVL("4_GUN_ADET",0)) AS DORT_GUN_ADET,
+
+      (ROUND((NVL("4_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS DORT_GUN_ORAN,
+
+      (NVL("5_GUN_ADET",0) ) AS BES_GUN_ADET,
+
+      (ROUND((NVL("5_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS BES_GUN_ORAN,
+
+      (NVL("6_GUN_ADET",0)) AS ALTI_GUN_ADET,
+
+      (ROUND((NVL("6_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS ALTI_GUN_ORAN,
+
+      (NVL("7_GUN_ADET",0)) AS YEDI_GUN_ADET,
+
+      (ROUND((NVL("7_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS YEDI_GUN_ORAN,
+
+      (NVL("8_GUN_ADET",0))AS SEKIZ_GUN_ADET,
+
+      (ROUND((NVL("8_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS SEKIZ_GUN_ORAN,
+
+      (NVL("9_GUN_ADET",0)) AS DOKUZ_GUN_ADET,
+
+      (ROUND((NVL("9_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS DOKUZ_GUN_ORAN,
+
+      (NVL("0_GUN_ADET",0)+NVL("1_GUN_ADET",0)+NVL("2_GUN_ADET",0)+NVL("3_GUN_ADET",0)+NVL("4_GUN_ADET",0)+NVL("5_GUN_ADET",0)+NVL("6_GUN_ADET",0)+NVL("7_GUN_ADET",0)+NVL("8_GUN_ADET",0)+NVL("9_GUN_ADET",0)) AS Toplam_KK, ---Toplam kredi kullandirim adedi
+
+      ROUND((NVL("0_GUN_ADET",0)+NVL("1_GUN_ADET",0)+NVL("2_GUN_ADET",0)+NVL("3_GUN_ADET",0)+NVL("4_GUN_ADET",0)+NVL("5_GUN_ADET",0)+NVL("6_GUN_ADET",0)+NVL("7_GUN_ADET",0)+NVL("8_GUN_ADET",0)+NVL("9_GUN_ADET",0))/TOPLAM_SMS.Toplam_SMS_ADET,4) AS Toplam_KK_ORAN
+
+      FROM
+
+      --- aylik sms toplami
+
+      (
+
+      Select
+
+      --SLOG.MUSTERI_NUMARASI,
+
+      SLOG.SMS_GROUP_NAME,
+
+      SLOG.SMS_SENT_YEAR,
+
+      SLOG.SMS_SENT_MONTH,
+
+      count( SLOG.MUSTERI_NUMARASI) as Toplam_SMS_ADET
+
+      from XDWH.SMSDASHBOARD_SMS_LOG  SLOG
+
+      WHERE
+
+      1=1
+
+      AND SLOG.SMS_GROUP_NAME_ID=3 -- bireysel KRD
+
+      group by
+
+      SLOG.SMS_GROUP_NAME,
+
+      SLOG.SMS_SENT_YEAR,
+
+      SLOG.SMS_SENT_MONTH
+
+      )TOPLAM_SMS
+
+      LEFT JOIN
+
+      (
+
+            SELECT * FROM
+
+            (Select
+
+            --SLOG.MUSTERI_NUMARASI,
+
+            SLOG.SMS_GROUP_NAME,
+
+            SLOG.SMS_SENT_YEAR,
+
+            SLOG.SMS_SENT_MONTH,
+
+            KKT_SMSDATE_FARK,
+
+            count(SLOG.MUSTERI_NUMARASI) toplam_adet
+
+            from XDWH.SMSDASHBOARD_SMS_RISK_LOG SLOG
+
+            WHERE
+
+            1=1
+
+            AND SLOG.SMS_GROUP_NAME_ID=3 -- bireysel KRD
+
+            AND KKT_SMSDATE_FARK>=0  AND KKT_SMSDATE_FARK<=9 --AND KKT_SMSDATE_FARK<=9-- KRedi kullandirim tarihi sms date'den buyuk ise SMS etkisinin kredi kullaniminda etkili oldugu düsünülür
+
+             AND  (KRD_ALT_URUN_KODU)
+
+            IN  ('5B','92','0B','0B','5E','5C','5G','5C','5B','0B','5B','5E','5G','23','5E','5E','84','89','24',
+
+            '0B','68','91','92','0B','5C','0B','5B','5C','0B','0B','91','4Y','77','2','87','31','14','16','15','82',
+
+            '61','3','47','2','1','1','2','1','38','39','43','43','43','4') --- sadece bireysel krediye dönenler
+
+            group by
+
+            SLOG.SMS_GROUP_NAME,
+
+            SLOG.SMS_SENT_YEAR,
+
+            SLOG.SMS_SENT_MONTH,
+
+            KKT_SMSDATE_FARK
+
+            )
+
+            PIVOT
+
+            (
+
+            sum(toplam_adet) "GUN_ADET"
+
+            FOR KKT_SMSDATE_FARK  IN (0,1,2,3,4,5,6,7,8,9)
+
+            )
+
+      )KK
+
+       ON  TOPLAM_SMS.SMS_GROUP_NAME=KK.SMS_GROUP_NAME
+
+       AND TOPLAM_SMS.SMS_SENT_YEAR=KK.SMS_SENT_YEAR
+
+       AND TOPLAM_SMS.SMS_SENT_MONTH=KK.SMS_SENT_MONTH
+
+      )
+
+      --ORDER BY 4,5,6,7
+
+);
+
+ 
+
+COMMIT;
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+-------------------- Bireysel KRD RISK ----------------RISK----------------------------------------------------BIREYSEL KREDILER  RISK SEGMENT ------------- SMS GROUP NAME
+
+execute immediate  'truncate table XDWH.BRYSL_KRD_RISK_SMS_ANALIZI_G';
+
+COMMIT;
+
+ 
+
+ 
+
+ 
+
+INSERT /*APPEND*/ INTO XDWH.BRYSL_KRD_RISK_SMS_ANALIZI_G
+
+(
+
+      SELECT *FROM
+
+      (
+
+      SELECT
+
+         'BIREYSEL_KREDILER_RISK_SMS_ANALIZI_GUNLUK' AS REPORT_NAME,
+
+          TRUNC(Current_date) as ETL_DATE,
+
+         (TO_CHAR (Current_date, 'HH24:MI:SS')) AS ETL_TIME,
+
+      TOPLAM_SMS.SMS_GROUP_NAME,
+
+      TOPLAM_SMS.SMS_SENT_YEAR,
+
+      TOPLAM_SMS.SMS_SENT_MONTH,
+
+      TO_CHAR(TOPLAM_SMS.SMS_SENT_DATE,'DD/MM/YY') AS SMS_SENT_DATE,
+
+      TOPLAM_SMS.RISK_SEGMENT,
+
+      TOPLAM_SMS.Toplam_SMS_ADET,
+
+      (NVL("0_GUN_ADET",0)) AS SIFIR_GUN_ADET ,
+
+      (ROUND((NVL("0_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS SIFIR_GUN_ORAN,
+
+      (NVL("1_GUN_ADET",0)) AS BIR_GUN_ADET,
+
+      (ROUND((NVL("1_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS BIR_GUN_ORAN,
+
+      (NVL("2_GUN_ADET",0)) AS IKI_GUN_ADET,
+
+      (ROUND((NVL("2_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS IKI_GUN_ORAN,
+
+      (NVL("3_GUN_ADET",0)) AS UC_GUN_ADET,
+
+      (ROUND((NVL("3_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS UC_GUN_ORAN,
+
+      (NVL("4_GUN_ADET",0)) AS DORT_GUN_ADET,
+
+      (ROUND((NVL("4_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS DORT_GUN_ORAN ,
+
+      (NVL("5_GUN_ADET",0) ) AS BES_GUN_ADET,
+
+      (ROUND((NVL("5_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS BES_GUN_ORAN,
+
+      (NVL("6_GUN_ADET",0)) AS ALTI_GUN_ADET,
+
+      (ROUND((NVL("6_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS ALTI_GUN_ORAN,
+
+      (NVL("7_GUN_ADET",0)) AS YEDI_GUN_ADET,
+
+      (ROUND((NVL("7_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS YEDI_GUN_ORAN,
+
+      (NVL("8_GUN_ADET",0))AS SEKIZ_GUN_ADET,
+
+      (ROUND((NVL("8_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS SEKIZ_GUN_ORAN,
+
+      (NVL("9_GUN_ADET",0)) AS DOKUZ_GUN_ADET,
+
+      (ROUND((NVL("9_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS DOKUZ_GUN_ORAN,
+
+      (NVL("0_GUN_ADET",0)+NVL("1_GUN_ADET",0)+NVL("2_GUN_ADET",0)+NVL("3_GUN_ADET",0)+NVL("4_GUN_ADET",0)+NVL("5_GUN_ADET",0)+NVL("6_GUN_ADET",0)+NVL("7_GUN_ADET",0)+NVL("8_GUN_ADET",0)+NVL("9_GUN_ADET",0)) AS Toplam_KK,
+
+      ROUND((NVL("0_GUN_ADET",0)+NVL("1_GUN_ADET",0)+NVL("2_GUN_ADET",0)+NVL("3_GUN_ADET",0)+NVL("4_GUN_ADET",0)+NVL("5_GUN_ADET",0)+NVL("6_GUN_ADET",0)+NVL("7_GUN_ADET",0)+NVL("8_GUN_ADET",0)+NVL("9_GUN_ADET",0))/TOPLAM_SMS.Toplam_SMS_ADET,4) AS Toplam_KK_ORAN
+
+      FROM
+
+      (
+
+      Select
+
+      --SLOG.MUSTERI_NUMARASI,
+
+      SLOG.SMS_GROUP_NAME,
+
+      SLOG.SMS_SENT_YEAR,
+
+      SLOG.SMS_SENT_MONTH,
+
+      SLOG.SMS_SENT_DATE,
+
+      SLOG.RISK_SEGMENT,
+
+      count(SLOG.MUSTERI_NUMARASI) as Toplam_SMS_ADET
+
+      from (
+
+        select
+
+            DISTINCT SLOG.MUSTERI_NUMARASI,
+
+                         SLOG.SMS_SENT_DATE,
+
+                         SLOG.SMS_SENT_YEAR,
+
+                         SLOG.SMS_SENT_MONTH,
+
+                         SLOG.CAMPAIGN_GROUP,
+
+                         SLOG.CAMPAIGN_NAME,
+
+                         SLOG.SMS_GROUP_NAME,
+
+                         SLOG.SMS_GROUP_NAME_ID,
+
+                         SLOG.SMS_SUB_GROUP_NAME,
+
+                         SLOG.SMS_SUB_GROUP_NAME_ID,
+
+                         SLOG.RISK_SEGMENT
+
+                         FROM
+
+                          XDWH.SMSDASHBOARD_SMS_RISK_LOG SLOG
+
+                          where
+
+                          1=1
+
+      ) SLOG
+
+      WHERE
+
+      1=1
+
+      AND SLOG.SMS_GROUP_NAME_ID=3 -- bireysel KRD
+
+      group by
+
+      SLOG.SMS_GROUP_NAME,
+
+      SLOG.SMS_SENT_YEAR,
+
+      SLOG.SMS_SENT_MONTH,
+
+      SLOG.SMS_SENT_DATE,
+
+      SLOG.RISK_SEGMENT
+
+      --SLOG.MUSTERI_NUMARASI
+
+      )TOPLAM_SMS -- günlük toplam sms sayisi
+
+      LEFT JOIN
+
+      (
+
+            SELECT * FROM
+
+            (Select
+
+            --SLOG.MUSTERI_NUMARASI,
+
+            SLOG.SMS_GROUP_NAME,
+
+            SLOG.SMS_SENT_YEAR,
+
+            SLOG.SMS_SENT_MONTH,
+
+            SLOG.SMS_SENT_DATE,
+
+            KKT_SMSDATE_FARK,
+
+            RISK_SEGMENT,
+
+            count(SLOG.MUSTERI_NUMARASI) toplam_adet
+
+            from XDWH.SMSDASHBOARD_SMS_RISK_LOG SLOG
+
+            WHERE
+
+            1=1
+
+            AND SLOG.SMS_GROUP_NAME_ID=3 -- bireysel KRD
+
+            AND KKT_SMSDATE_FARK>=0  AND KKT_SMSDATE_FARK<=9 --AND KKT_SMSDATE_FARK<=9-- KRedi kullandirim tarihi sms date'den buyuk ise SMS etkisinin kredi kullaniminda etkili oldugu düsünülür
+
+            AND  (KRD_ALT_URUN_KODU)
+
+            IN  ('5B','92','0B','0B','5E','5C','5G','5C','5B','0B','5B','5E','5G','23','5E','5E','84','89','24',
+
+            '0B','68','91','92','0B','5C','0B','5B','5C','0B','0B','91','4Y','77','2','87','31','14','16','15','82',
+
+            '61','3','47','2','1','1','2','1','38','39','43','43','43','4') --- sadece bireysel krediye dönenler
+
+            group by
+
+            SLOG.SMS_GROUP_NAME,
+
+            SLOG.SMS_SENT_YEAR,
+
+            SLOG.SMS_SENT_MONTH,
+
+            SLOG.SMS_SENT_DATE,
+
+            KKT_SMSDATE_FARK,
+
+            RISK_SEGMENT
+
+            )
+
+            PIVOT
+
+            (
+
+            sum(toplam_adet) "GUN_ADET"
+
+            FOR KKT_SMSDATE_FARK  IN (0,1,2,3,4,5,6,7,8,9)
+
+            )
+
+      )KK
+
+       ON  TOPLAM_SMS.SMS_GROUP_NAME=KK.SMS_GROUP_NAME
+
+       AND TOPLAM_SMS.SMS_SENT_YEAR=KK.SMS_SENT_YEAR
+
+       AND TOPLAM_SMS.SMS_SENT_MONTH=KK.SMS_SENT_MONTH
+
+       AND TOPLAM_SMS.SMS_SENT_DATE=KK.SMS_SENT_DATE
+
+       AND TOPLAM_SMS.RISK_SEGMENT=KK.RISK_SEGMENT
+
+      )
+
+      ---------------------AYLIK TOPLAM
+
+      UNION ALL
+
+      (
+
+      SELECT
+
+         'BIREYSEL_KREDILER_RISK_SMS_ANALIZI_GUNLUK' AS REPORT_NAME,
+
+          TRUNC(Current_date) as ETL_DATE,
+
+         (TO_CHAR (Current_date, 'HH24:MI:SS')) AS ETL_TIME,
+
+      TOPLAM_SMS.SMS_GROUP_NAME,
+
+      TOPLAM_SMS.SMS_SENT_YEAR,
+
+      TOPLAM_SMS.SMS_SENT_MONTH,
+
+      'AYLIK_TOPLAM' AS SMS_SENT_DATE,
+
+      TOPLAM_SMS.RISK_SEGMENT,
+
+      TOPLAM_SMS.Toplam_SMS_ADET,
+
+      (NVL("0_GUN_ADET",0)) AS SIFIR_GUN_ADET,
+
+      (ROUND((NVL("0_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS SIFIR_GUN_ORAN ,
+
+      (NVL("1_GUN_ADET",0)) AS BIR_GUN_ADET,
+
+      (ROUND((NVL("1_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS BIR_GUN_ORAN ,
+
+      (NVL("2_GUN_ADET",0)) AS IKI_GUN_ADET,
+
+      (ROUND((NVL("2_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS IKI_GUN_ORAN,
+
+      (NVL("3_GUN_ADET",0)) AS UC_GUN_ADET,
+
+      (ROUND((NVL("3_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS UC_GUN_ORAN,
+
+      (NVL("4_GUN_ADET",0)) AS DORT_GUN_ADET,
+
+      (ROUND((NVL("4_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS DORT_GUN_ORAN,
+
+      (NVL("5_GUN_ADET",0) ) AS BES_GUN_ADET,
+
+      (ROUND((NVL("5_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS BES_GUN_ORAN,
+
+      (NVL("6_GUN_ADET",0)) AS ALTI_GUN_ADET,
+
+      (ROUND((NVL("6_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS ALTI_GUN_ORAN,
+
+      (NVL("7_GUN_ADET",0)) AS YEDI_GUN_ADET,
+
+      (ROUND((NVL("7_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS YEDI_GUN_ORAN ,
+
+      (NVL("8_GUN_ADET",0))AS SEKIZ_GUN_ADET,
+
+      (ROUND((NVL("8_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS SEKIZ_GUN_ORAN,
+
+      (NVL("9_GUN_ADET",0)) AS DOKUZ_GUN_ADET,
+
+      (ROUND((NVL("9_GUN_ADET",0)/TOPLAM_SMS.Toplam_SMS_ADET),4)) AS DOKUZ_GUN_ORAN,
+
+      (NVL("0_GUN_ADET",0)+NVL("1_GUN_ADET",0)+NVL("2_GUN_ADET",0)+NVL("3_GUN_ADET",0)+NVL("4_GUN_ADET",0)+NVL("5_GUN_ADET",0)+NVL("6_GUN_ADET",0)+NVL("7_GUN_ADET",0)+NVL("8_GUN_ADET",0)+NVL("9_GUN_ADET",0)) AS Toplam_KK,
+
+      ROUND((NVL("0_GUN_ADET",0)+NVL("1_GUN_ADET",0)+NVL("2_GUN_ADET",0)+NVL("3_GUN_ADET",0)+NVL("4_GUN_ADET",0)+NVL("5_GUN_ADET",0)+NVL("6_GUN_ADET",0)+NVL("7_GUN_ADET",0)+NVL("8_GUN_ADET",0)+NVL("9_GUN_ADET",0))/TOPLAM_SMS.Toplam_SMS_ADET,4) AS Toplam_KK_ORAN
+
+      FROM
+
+      (
+
+      Select
+
+      --SLOG.MUSTERI_NUMARASI,
+
+      SLOG.SMS_GROUP_NAME,
+
+      SLOG.SMS_SENT_YEAR,
+
+      SLOG.SMS_SENT_MONTH,
+
+      SLOG.RISK_SEGMENT,
+
+      count(SLOG.MUSTERI_NUMARASI) as Toplam_SMS_ADET
+
+      from (
+
+        select
+
+            DISTINCT SLOG.MUSTERI_NUMARASI,
+
+                         SLOG.SMS_SENT_DATE,
+
+                         SLOG.SMS_SENT_YEAR,
+
+                         SLOG.SMS_SENT_MONTH,
+
+                         SLOG.CAMPAIGN_GROUP,
+
+                         SLOG.CAMPAIGN_NAME,
+
+                         SLOG.SMS_GROUP_NAME,
+
+                         SLOG.SMS_GROUP_NAME_ID,
+
+                         SLOG.SMS_SUB_GROUP_NAME,
+
+                         SLOG.SMS_SUB_GROUP_NAME_ID,
+
+                         SLOG.RISK_SEGMENT
+
+                          FROM
+
+                          XDWH.SMSDASHBOARD_SMS_RISK_LOG SLOG
+
+                          where
+
+                          1=1
+
+      ) SLOG
+
+      WHERE
+
+      1=1
+
+      AND SLOG.SMS_GROUP_NAME_ID=3 -- bireysel KRD
+
+      group by
+
+      SLOG.SMS_GROUP_NAME,
+
+      SLOG.SMS_SENT_YEAR,
+
+      SLOG.SMS_SENT_MONTH,
+
+      SLOG.RISK_SEGMENT
+
+      )TOPLAM_SMS
+
+      LEFT JOIN
+
+      (
+
+            SELECT * FROM
+
+            (Select
+
+            --SLOG.MUSTERI_NUMARASI,
+
+            SLOG.SMS_GROUP_NAME,
+
+            SLOG.SMS_SENT_YEAR,
+
+            SLOG.SMS_SENT_MONTH,
+
+            KKT_SMSDATE_FARK,
+
+            SLOG.RISK_SEGMENT,
+
+            count(SLOG.MUSTERI_NUMARASI) toplam_adet
+
+            from XDWH.SMSDASHBOARD_SMS_RISK_LOG SLOG
+
+            WHERE
+
+            1=1
+
+            AND SLOG.SMS_GROUP_NAME_ID=3 -- bireysel KRD
+
+            AND KKT_SMSDATE_FARK>=0  AND KKT_SMSDATE_FARK<=9 --AND KKT_SMSDATE_FARK<=9-- KRedi kullandirim tarihi sms date'den buyuk ise SMS etkisinin kredi kullaniminda etkili oldugu düsünülür
+
+            AND  (KRD_ALT_URUN_KODU)
+
+            IN  ('5B','92','0B','0B','5E','5C','5G','5C','5B','0B','5B','5E','5G','23','5E','5E','84','89','24',
+
+            '0B','68','91','92','0B','5C','0B','5B','5C','0B','0B','91','4Y','77','2','87','31','14','16','15','82',
+
+            '61','3','47','2','1','1','2','1','38','39','43','43','43','4') --- sadece bireysel krediye dönenler
+
+            group by
+
+            SLOG.SMS_GROUP_NAME,
+
+            SLOG.SMS_SENT_YEAR,
+
+            SLOG.SMS_SENT_MONTH,
+
+            KKT_SMSDATE_FARK,
+
+            SLOG.RISK_SEGMENT
+
+            )
+
+            PIVOT
+
+            (
+
+            sum(toplam_adet) "GUN_ADET"
+
+            FOR KKT_SMSDATE_FARK  IN (0,1,2,3,4,5,6,7,8,9)
+
+            )
+
+      )KK
+
+       ON  TOPLAM_SMS.SMS_GROUP_NAME=KK.SMS_GROUP_NAME
+
+       AND TOPLAM_SMS.SMS_SENT_YEAR=KK.SMS_SENT_YEAR
+
+       AND TOPLAM_SMS.SMS_SENT_MONTH=KK.SMS_SENT_MONTH
+
+       AND TOPLAM_SMS.RISK_SEGMENT=KK.RISK_SEGMENT
+
+      )
+
+     -- ORDER BY 4,5,6,7,8
+
+);
+
+ 
+
+COMMIT;
+
+-----------------------------------------------------------------MODEL -------------------
+
+ 
+
+ 
+
+-------------------- Bireysel KRD RISK ----------------MODEL ----------------------------------------------------BIREYSEL KREDILER  MODEL  ------------- SMS GROUP NAME
+
+execute immediate  'truncate table XDWH.BRYSL_KRD_MODEL_SMS_ANALIZI_G';
+
+COMMIT;
+
+ 
